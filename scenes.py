@@ -424,7 +424,7 @@ class IntroductionScene(Scene):
             # self.play(ReplacementTransform(title_short_glyphs[3], title_long_glyphs[3]))
             # self.play(ReplacementTransform(title_short_glyphs[4], title_long_glyphs[4]))
             ######
-            self.play(title_short.animate.to_edge(UP))
+            self.play(title_short.animate.to_edge(UP).scale(0.5))
         
         
         ######
