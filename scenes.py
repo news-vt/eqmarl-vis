@@ -803,67 +803,6 @@ class EntanglementScene(Scene):
         )
         
         self.wait()
-        
-        
-        
-        
-    def construct_old(self):
-        q0 = Qubit()
-        q1 = Qubit()
-        self.play(Create(q0))
-        self.play(q0.animate.shift(LEFT*4), GrowFromCenter(q1), q1.animate.shift(RIGHT*4))
-        # self.play(q1.animate.shift(RIGHT*2))
-        # self.play(q0.animate.set_state_angle(90*DEGREES))
-        # self.play(q0.animate.set_state_angle(180*DEGREES))
-        
-        
-        t = ValueTracker(0)
-        
-        
-        # wave
-        
-        
-        
-        
-        
-        
-        # wave_width = abs(q1.get_x(LEFT) - q0.get_x(RIGHT))
-        # wave_freq = 2 * np.pi / wave_width
-        
-        
-        # wave_functions = [
-        #     lambda x: 0.5*np.sin(4*x - t.get_value()),
-        #     lambda x: 0.5*np.tan(4*x - t.get_value()),
-        # ]
-        wave_graphs = [
-            always_redraw(lambda: FunctionGraph(lambda x: 0.5*np.sin(4*x - t.get_value()), color=BLUE_C, x_range=[q0.get_x(RIGHT), q1.get_x(LEFT)])),
-            always_redraw(lambda: FunctionGraph(lambda x: 0.5*np.sin(4*x - t.get_value() + 180*DEGREES), color=BLUE_E, x_range=[q0.get_x(RIGHT), q1.get_x(LEFT)])),
-            # always_redraw(lambda: FunctionGraph(wf, color=BLUE, x_range=[q0.get_x(RIGHT), q1.get_x(LEFT)])) 
-            # for wf in wave_functions
-        ]
-        
-        self.add(*wave_graphs)
-        
-        
-        # wave_function = lambda x: 0.5*np.sin(4*x - t.get_value())
-        # wave_graph = always_redraw(lambda: FunctionGraph(wave_function, color=BLUE, x_range=[q0.get_x(RIGHT), q1.get_x(LEFT)]))
-        #########
-        # wave_graph.stretch_to_fit_width(abs(q1.get_x(LEFT) - q0.get_x(RIGHT)))
-        # wave_graph.move_to((q0.get_x(RIGHT) + q1.get_x(LEFT))/2 * RIGHT)
-        # wave.align_to(q0, RIGHT)
-        # wave.align_to(q1, LEFT)
-        # self.play(Write(wave_graph))
-        #######
-        # self.add(wave_graph)
-        
-        # self.play(t.animate(run_time=6).set_value(t.get_value()*100))
-        self.play(t.animate.set_value(4*np.pi), run_time=1, rate_func=linear)
-        self.play(t.animate.set_value(0), run_time=1, rate_func=linear)
-        self.play(t.animate.set_value(4*np.pi), run_time=1, rate_func=linear)
-        self.play(t.animate.set_value(0), run_time=1, rate_func=linear)
-        
-        self.wait()
-
 
 
 
