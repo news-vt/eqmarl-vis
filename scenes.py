@@ -1,94 +1,198 @@
 from manim import *
 import manim.typing
 import itertools
+from enum import IntEnum
 
 
-# Objects for reuse.
-# obj_grid_empty = Square(color=GRAY, fill_opacity=0.5)
-obj_grid_empty = Square(color=GRAY, fill_opacity=0)
-obj_grid_lava = Square(color=ORANGE, fill_opacity=0.5)
-obj_grid_goal = Square(color=GREEN, fill_opacity=0.5)
-obj_player_base = obj_grid_empty.copy()
-# obj_player_core = Triangle(color=RED, fill_opacity=0.5).rotate(270*DEGREES).move_to(obj_player_base.get_center())
-obj_player_core = Triangle(color=RED, fill_opacity=0.5).rotate(270*DEGREES)
-obj_player = VGroup(*[
-    obj_player_base,
-    obj_player_core,
-])
+# # Objects for reuse.
+# # obj_grid_empty = Square(color=GRAY, fill_opacity=0.5)
+# obj_grid_empty = Square(color=GRAY, fill_opacity=0)
+# obj_grid_lava = Square(color=ORANGE, fill_opacity=0.5)
+# obj_grid_goal = Square(color=GREEN, fill_opacity=0.5)
+# obj_player_base = obj_grid_empty.copy()
+# # obj_player_core = Triangle(color=RED, fill_opacity=0.5).rotate(270*DEGREES).move_to(obj_player_base.get_center())
+# # obj_player_core = Triangle(color=RED, fill_opacity=0.5).rotate(270*DEGREES)
+# obj_player_core = VGroup(*[
+#     Triangle(color=RED, fill_opacity=0.5).rotate(270*DEGREES),
+# ])
+# obj_player_core += Dot(obj_player_core.get_right()) # Dot represents the leading tip of the player triangle.
+# obj_player = VGroup(*[
+#     obj_player_base,
+#     obj_player_core,
+# ])
 
 
 
-def build_minigrid(
-    grid_size: tuple[int, int] = (5,5),
-    player_pos: tuple[int, int] | None = None, # Defaults to top-left.
-    goal_pos: tuple[int, int] | None = None, # Defaults to bottom-right.
-    hazards: list[tuple[int, int]] = [],
-    grid_obj_default: Mobject = obj_grid_empty,
-    grid_obj_hazard: Mobject = obj_grid_lava,
-    grid_obj_goal: Mobject = obj_grid_goal,
-    grid_obj_player: Mobject = obj_player,
-    ) -> list[list[VMobject]]:
-    """Helper function to generate a MiniGrid environment.
+# def build_minigrid(
+#     grid_size: tuple[int, int] = (5,5),
+#     player_pos: tuple[int, int] | None = None, # Defaults to top-left.
+#     goal_pos: tuple[int, int] | None = None, # Defaults to bottom-right.
+#     hazards: list[tuple[int, int]] = [],
+#     grid_obj_default: Mobject = obj_grid_empty,
+#     grid_obj_hazard: Mobject = obj_grid_lava,
+#     grid_obj_goal: Mobject = obj_grid_goal,
+#     grid_obj_player: Mobject = obj_player,
+#     ) -> list[list[VMobject]]:
+#     """Helper function to generate a MiniGrid environment.
     
-    Returns a 2D matrix of Manim `VMobject`.
-    """
-    if player_pos == None: # Defaults to top-left.
-        player_pos = (0,0)
-    if goal_pos == None: # Defaults to bottom-right.
-        goal_pos = (grid_size[0]-1, grid_size[1]-1)
+#     Returns a 2D matrix of Manim `VMobject`.
+#     """
+#     if player_pos == None: # Defaults to top-left.
+#         player_pos = (0,0)
+#     if goal_pos == None: # Defaults to bottom-right.
+#         goal_pos = (grid_size[0]-1, grid_size[1]-1)
 
-    # Build the grid.
-    rows = []
-    for r in range(grid_size[0]):
-        cols = []
-        for c in range(grid_size[1]):
-            # if (r,c) == player_pos:
-            #     cols.append(grid_obj_player.copy())
-            if (r,c) == goal_pos:
-                cols.append(grid_obj_goal.copy())
-            elif (r,c) in hazards:
-                cols.append(grid_obj_hazard.copy())
-            else:
-                cols.append(grid_obj_default.copy())
-        rows.append(cols)
-    return rows
+#     # Build the grid.
+#     rows = []
+#     for r in range(grid_size[0]):
+#         cols = []
+#         for c in range(grid_size[1]):
+#             # if (r,c) == player_pos:
+#             #     cols.append(grid_obj_player.copy())
+#             if (r,c) == goal_pos:
+#                 cols.append(grid_obj_goal.copy())
+#             elif (r,c) in hazards:
+#                 cols.append(grid_obj_hazard.copy())
+#             else:
+#                 cols.append(grid_obj_default.copy())
+#         rows.append(cols)
+#     return rows
 
 
+class MinigridAction(IntEnum):
+    LEFT = 0
+    RIGHT = 1
+    FORWARD = 2
 
 class MiniGrid(VMobject):
     
-    def __init__(self, grid_size: tuple[int,int], *args, **kwargs):
+    # Common objects for reuse.
+    assets: dict[str, VMobject] = {
+        'grid_empty': Square(color=GRAY, fill_opacity=0),
+        'grid_lava': Square(color=ORANGE, fill_opacity=0.5),
+        'grid_goal': Square(color=GREEN, fill_opacity=0.5),
+        'player': VGroup(*[
+            Triangle(color=RED, fill_opacity=0.5),
+            Dot(Triangle().get_top()) # Dot represents the leading tip of the player triangle.
+        ],z_index=1).rotate(270*DEGREES), # Higher z-index sets on top.
+    }
+    
+    def __init__(self, 
+        grid_size: tuple[int,int], 
+        *args,
+        player_look_angle: float = 270, # degrees, RIGHT
+        player_grid_pos: tuple[int,int] = (0,0), # Top-left.
+        goal_grid_pos: tuple[int,int] = (-1, -1),
+        hazards_grid_pos: list[tuple[int,int]] = [],
+        **kwargs,
+        ):
         super().__init__(*args, **kwargs)
         self.grid_size = grid_size
         
+        # Support for negative indexing.
+        def negative_index_rollover(i: int, size: int):
+            return i if i >= 0 else i+size
+        player_grid_pos = tuple(negative_index_rollover(i, size) for i,size in zip(player_grid_pos, grid_size))
+        goal_grid_pos = tuple(negative_index_rollover(i, size) for i,size in zip(goal_grid_pos, grid_size))
+        hazards_grid_pos = [tuple(negative_index_rollover(i, size) for i,size in zip(haz, grid_size)) for haz in hazards_grid_pos]
+        
         # Defaults to `RIGHT`, and upper-left (0,0).
-        self.player_look_angle = 270 # degrees, RIGHT
-        self.player_grid_pos = (0,0)
-
-        objs_in_grid = build_minigrid(
+        self.player_look_angle = player_look_angle
+        self.player_grid_pos = player_grid_pos
+        self.goal_pos = goal_grid_pos
+        self.hazards_grid_pos = hazards_grid_pos
+        
+        # # Build the grid using assets.
+        # objs_in_grid = self.build_minigrid(
+        #     grid_size=grid_size,
+        #     player_pos=self.player_grid_pos,
+        #     goal_pos=self.goal_pos,
+        #     hazards=self.hazards_grid_pos,
+        #     grid_obj_default=self.assets['grid_empty'],
+        #     grid_obj_hazard=self.assets['grid_lava'],
+        #     grid_obj_goal=self.assets['grid_goal'],
+        # )
+        # self.grid = VGroup(*[o for o in itertools.chain(*objs_in_grid)])
+        # self.grid.arrange_in_grid(rows=grid_size[0], cols=grid_size[1], buff=0)
+        
+        # self.player = self.assets['player'].copy()
+        # # player_pos = (0,0)
+        # player_target_pos = self.grid[self.player_grid_pos[0]*grid_size[0] + self.player_grid_pos[1]].get_center()
+        # self.player.move_to(player_target_pos)
+        # self.world = VGroup(self.player, self.grid)
+        self.world = self.build_minigrid(
             grid_size=grid_size,
             player_pos=self.player_grid_pos,
-            goal_pos=(4,4),
-            hazards=[
-                (1,1),
-                (1,2),
-                (1,3),
-            ],
+            goal_pos=self.goal_pos,
+            hazards=self.hazards_grid_pos,
+            grid_obj_default=self.assets['grid_empty'],
+            grid_obj_hazard=self.assets['grid_lava'],
+            grid_obj_goal=self.assets['grid_goal'],
+            grid_obj_player=self.assets['player'],
         )
-        grid = VGroup(*[o for o in itertools.chain(*objs_in_grid)])
-        grid.arrange_in_grid(rows=grid_size[0], cols=grid_size[1], buff=0)
-        
-        player = obj_player_core.copy()
-        player_pos = (0,0)
-        player_target_pos = grid[player_pos[0]*grid_size[0] + player_pos[1]].get_center()
-        player.move_to(player_target_pos)
-        grid = VGroup(player, grid)
-        self.grid = grid
         
         # IMPORTANT - we must add all sub-objects that we want displayed.
-        self.add(self.grid)
+        self.add(self.world)
+    
+    @staticmethod
+    def build_minigrid(
+        grid_size: tuple[int, int],
+        grid_obj_default: Mobject,
+        grid_obj_hazard: Mobject,
+        grid_obj_goal: Mobject,
+        grid_obj_player: Mobject,
+        player_pos: tuple[int, int] | None = None, # Defaults to top-left.
+        goal_pos: tuple[int, int] | None = None, # Defaults to bottom-right.
+        hazards: list[tuple[int, int]] = [],
+        # grid_obj_player: Mobject = obj_player,
+        ) -> VDict:
+        """Helper function to generate a MiniGrid environment.
+        
+        Returns a 2D matrix of Manim `VMobject`.
+        """
+        if player_pos == None: # Defaults to top-left.
+            player_pos = (0,0)
+        if goal_pos == None: # Defaults to bottom-right.
+            goal_pos = (grid_size[0]-1, grid_size[1]-1)
+        
+        # # Support for negative indexing.
+        # def negative_index_rollover(i: int, size: int):
+        #     return i if i >= 0 else i+size
+        # player_pos = tuple(negative_index_rollover(i, size) for i,size in zip(player_pos, grid_size))
+        # goal_pos = tuple(negative_index_rollover(i, size) for i,size in zip(goal_pos, grid_size))
+        # hazards = [tuple(negative_index_rollover(i, size) for i,size in zip(haz, grid_size)) for haz in hazards]
+
+        # Build the grid.
+        rows = []
+        for r in range(grid_size[0]):
+            cols = []
+            for c in range(grid_size[1]):
+                # if (r,c) == player_pos:
+                #     cols.append(grid_obj_player.copy())
+                if (r,c) == goal_pos:
+                    cols.append(grid_obj_goal.copy())
+                elif (r,c) in hazards:
+                    cols.append(grid_obj_hazard.copy())
+                else:
+                    cols.append(grid_obj_default.copy())
+            rows.append(cols)
+        
+        grid = VGroup(*[o for o in itertools.chain(*rows)])
+        grid.arrange_in_grid(rows=grid_size[0], cols=grid_size[1], buff=0)
+        
+        player = grid_obj_player.copy()
+        # player_pos = (0,0)
+        player_target_pos = grid[player_pos[0]*grid_size[0] + player_pos[1]].get_center()
+        player.move_to(player_target_pos)
+        # world = VGroup(player, grid)
+        world = VDict({
+            'player': player,
+            'grid': grid,
+        })
+        return world
 
     def move_player(self, direction: manim.typing.Vector3D):
+        """Move player relative direction using one of (UP, LEFT, DOWN, RIGHT)."""
         
         # assert direction in (UP, LEFT, DOWN, RIGHT), "Can only move player UP/LEFT/DOWN/RIGHT."
         
@@ -113,15 +217,133 @@ class MiniGrid(VMobject):
         self.player_look_angle = turn_angle
         
         # Perform animation for rotation and shift.
-        if r < self.grid_size[0] and c < self.grid_size[1]:
+        if (r >= 0 and r < self.grid_size[0]) and (c >= 0 and c < self.grid_size[1]):
             self.player_grid_pos = (r,c)
-            return self.grid[0].animate.rotate(new_angle*DEGREES).shift(direction)
+            # return self.player.rotate(new_angle*DEGREES).shift(direction)
+            self.world['player'].rotate(new_angle*DEGREES).shift(direction)
         # Boundary of grid reached, only perform rotation.
         else:
-            return self.grid[0].animate.rotate(new_angle*DEGREES)
+            # return self.player.rotate(new_angle*DEGREES)
+            self.world['player'].rotate(new_angle*DEGREES)
+        
+        return self
+
+    def player_action(self, action: MinigridAction, *args, **kwargs) -> AnimationGroup:
+        """Moves player corresponding to an action, which is one of (LEFT, RIGHT, FORWARD)."""
+        
+        # print(f"{self.player_look_angle=}, {self.player_grid_pos=}")
+        
+        anims = []
+        
+        if action in (MinigridAction.LEFT, MinigridAction.RIGHT):
+            if action == MinigridAction.LEFT:
+                turn_amount = +90
+                new_angle = (self.player_look_angle + turn_amount)
+            elif action == MinigridAction.RIGHT:
+                turn_amount = -90
+                new_angle = (self.player_look_angle + turn_amount)
+            self.player_look_angle = new_angle % 360
+            # return self.world['player'].rotate(turn_amount*DEGREES)
+            # self.world['player'].rotate(turn_amount*DEGREES)
+            anims.append(
+                self.world['player'].animate.rotate(turn_amount*DEGREES)
+            )
+
+        elif action == MinigridAction.FORWARD:
+            r,c = self.player_grid_pos
+            if self.player_look_angle % 360 == 0:
+                shift_direction = UP
+                r -= 1
+            elif self.player_look_angle == 90:
+                shift_direction = LEFT
+                c -= 1
+            elif self.player_look_angle == 180:
+                shift_direction = DOWN
+                r += 1
+            elif self.player_look_angle == 270:
+                shift_direction = RIGHT
+                c += 1
+
+            # Only move if does not exceed grid boundary.
+            # print(f"{(r,c)=}, {(r >= 0 and r < self.grid_size[0]) and (c >= 0 and c < self.grid_size[1])}")
+            if (r >= 0 and r < self.grid_size[0]) and (c >= 0 and c < self.grid_size[1]):
+                self.player_grid_pos = (r,c)
+                # print(f"{(r,c)=}, {(r >= 0 and r < self.grid_size[0]) and (c >= 0 and c < self.grid_size[1])}")
+                # return self.world['player'].shift(shift_direction)
+                # return self.world['player'].animate.shift(shift_direction)
+                # self.world['player'].shift(shift_direction)
+                anims.append(
+                    self.world['player'].animate.shift(shift_direction)
+                )
+            
+            # Play a flash whenever the maze is solved.
+            if self.player_grid_pos == self.goal_pos:
+                anims.append(
+                    Flash(self.world['grid'][self.goal_pos[0]*self.grid_size[0] + self.goal_pos[1]], color=GREEN),
+                )
+                return LaggedStart(*anims, *args, **kwargs, lag_ratio=0.15)
+        
+        # return self
+        return AnimationGroup(*anims, *args, **kwargs)
+    
+    def animate_player_action(self, action: MinigridAction, *args, **kwargs) -> AnimationGroup:
+        
+        pos_before = self.player_grid_pos
+        anims = []
+        anims.append(
+            self.animate.player_action(action),
+        )
+        pos_after = self.player_grid_pos
+        print(f"{pos_before=}, {pos_after=}")
+        if self.player_grid_pos == self.goal_pos:
+            anims.append(
+                Flash(self.world['grid'][self.goal_pos[0]*self.grid_size[0] + self.goal_pos[1]]),
+            )
+        
+        return AnimationGroup(*anims, *args, **kwargs)
+        
 
 
-
+class GridTest(Scene):
+    def construct(self):
+        grid = MiniGrid(
+            grid_size=(5,5),
+            hazards_grid_pos=[
+                (1,1),
+                (1,2),
+                (1,3),
+            ],
+            goal_grid_pos=(-1,-1),
+            player_grid_pos=(0,-2),
+        )
+        grid = grid.scale(0.5)
+        
+        # self.add(grid)
+        self.play(Create(grid))
+        
+        # self.play(grid.grid[0].animate.rotate(90*DEGREES))
+        # self.play(grid.grid[0].animate.rotate(90*DEGREES))
+        
+        actions = [
+            MinigridAction.FORWARD,
+            MinigridAction.FORWARD,
+            # MinigridAction.FORWARD,
+            # MinigridAction.FORWARD,
+            MinigridAction.RIGHT,
+            MinigridAction.FORWARD,
+            MinigridAction.FORWARD,
+            MinigridAction.FORWARD,
+            MinigridAction.FORWARD,
+        ]
+        print(f"{grid.player_grid_pos=}")
+        # for a in actions:
+        #     self.play(grid.animate.player_action(a), run_time=0.5)
+        self.play(Succession(*[
+            # ApplyMethod(grid.player_action, a)
+            grid.animate.player_action(a)
+            for a in actions]))
+        
+        self.wait()
 
 
 
@@ -160,7 +382,15 @@ class EnvironmentIntroduction(Scene):
         # grid = VGroup(player, grid)
         # grid = grid.scale(0.5)
         ###########
-        grid = MiniGrid(grid_size=grid_size)
+        grid = MiniGrid(
+            grid_size=(5,5),
+            hazards_grid_pos=[
+                (1,1),
+                (1,2),
+                (1,3),
+            ],
+            goal_grid_pos=(-1,-1)
+        )
         grid = grid.scale(0.5)
         ###########
         
@@ -171,36 +401,32 @@ class EnvironmentIntroduction(Scene):
         
         
         t2 = Tex(r"This is an example of a $5 \times 5$ grid for 1 player:").move_to(t1.get_center())
-        # t2.next_to(grid, UP, aligned_edge=LEFT)
-        # self.play(ReplacementTransform(t1, t2))
         
         self.play(
             ReplacementTransform(t1, t2),
             Write(grid),
         )
-        
         self.play(
-            # ReplacementTransform(t1, t2),
-            grid.animate.shift(LEFT*2),
+            grid.animate.align_to(t2, LEFT),
         )
         
         
         # Introduce the grid.
         vgroup = VGroup(*[
             VGroup(*[
-                obj_grid_empty.copy().scale(0.25),
+                grid.assets['grid_empty'].copy().scale(0.25),
                 Tex("Empty grid square"),
             ]).arrange(),
             VGroup(*[
-                obj_grid_lava.copy().scale(0.25),
+                grid.assets['grid_lava'].copy().scale(0.25),
                 Tex("Lava hazard"),
             ]).arrange(),
             VGroup(*[
-                obj_grid_goal.copy().scale(0.25),
+                grid.assets['grid_goal'].copy().scale(0.25),
                 Tex("Goal"),
             ]).arrange(),
             VGroup(*[
-                obj_player_core.copy().scale(0.25),
+                grid.assets['player'].copy().scale(0.25),
                 Tex("Player"),
             ]).arrange(),
         ])
@@ -211,75 +437,25 @@ class EnvironmentIntroduction(Scene):
         
         
         
-        # Animate the player moving around a little.
+        # Describe the actions.
+        t3 = Tex(r"The player can take actions $a \in \{\textrm{LEFT}, \textrm{RIGHT}, \textrm{FORWARD}\}$").scale(0.6)
+        t3.next_to(grid, DOWN, aligned_edge=LEFT)
+        self.play(Write(t3))
         
-        # self.play(
-        #     grid[0].animate.rotate(-90*DEGREES),
-        #     # grid[0].animate.rotate(-90*DEGREES).shift(DOWN),
-        #     # grid[0].animate.shift(DOWN),
-        # )
-        # actions = [
-        #     DOWN, RIGHT, DOWN, DOWN, UP, UP, LEFT, RIGHT
-        # ]
-        # actions = [
-        #     RIGHT, RIGHT, RIGHT, RIGHT, RIGHT, RIGHT, LEFT 
-        # ]
+        # Animate the player moving around a little.
         actions = [
-            DOWN, DOWN, RIGHT, DOWN
+            MinigridAction.FORWARD,
+            MinigridAction.FORWARD,
+            MinigridAction.FORWARD,
+            MinigridAction.FORWARD,
+            MinigridAction.RIGHT,
+            MinigridAction.FORWARD,
+            MinigridAction.FORWARD,
+            MinigridAction.FORWARD,
+            MinigridAction.FORWARD,
         ]
         for a in actions:
-            self.play(grid.move_player(a))
-            # print(grid[0].get_angle())
-            # # if a == RIGHT:
-            # #     self.play(
-            # #         grid[0].animate.rotate(90*)
-            # #     )
-            # self.play(grid[0].animate.shift(a))
-        # self.play(
-        #     grid[0].animate.shift(DOWN),
-        #     grid[0].animate.shift(DOWN),
-        #     # grid[0].animate.shift(DOWN),
-        # )
-        # self.play(
-        #     grid[0].animate.shift(DOWN).shift(DOWN).shift(DOWN),
-        # )
-        
-        # objs_in_grid = build_minigrid(
-        #     grid_size=grid_size,
-        #     player_pos=(1,0),
-        #     goal_pos=(4,4),
-        #     hazards=[
-        #         (1,1),
-        #         (1,2),
-        #         (1,3),
-        #     ],
-        #     grid_obj_player=obj_player.rotate(90*DEGREES),
-        # )
-        # g2 = VGroup(*[o.scale(0.5) for o in itertools.chain(*objs_in_grid)])
-        # g2.arrange_in_grid(rows=grid_size[0], cols=grid_size[1], buff=0)
-        # g2.move_to(grid.get_center())
-        
-        # objs_in_grid = build_minigrid(
-        #     grid_size=grid_size,
-        #     player_pos=(2,0),
-        #     goal_pos=(4,4),
-        #     hazards=[
-        #         (1,1),
-        #         (1,2),
-        #         (1,3),
-        #     ],
-        #     grid_obj_player=obj_player.rotate(90*DEGREES),
-        # )
-        # g3 = VGroup(*[o.scale(0.5) for o in itertools.chain(*objs_in_grid)])
-        # g3.arrange_in_grid(rows=grid_size[0], cols=grid_size[1], buff=0)
-        # g3.move_to(g2.get_center())
-        # 
-        # self.play(
-        #     Transform(grid, g2),
-        # )
-        # self.play(
-        #     Transform(g2, g3),
-        # )
+            self.play(grid.player_action(a), run_time=0.5)
         
         
         self.wait()
@@ -470,8 +646,11 @@ class IntroductionScene(Scene):
 
 
 
-class EntanglementScene(Scene):
-    def construct(self):
+
+
+class Qubit(VMobject):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         circle = Circle()
         ellipse = Ellipse(width=circle.width, height=0.4).move_to(circle.get_center())
         ellipse = DashedVMobject(ellipse, num_dashes=12, equal_lengths=False)
@@ -480,23 +659,17 @@ class EntanglementScene(Scene):
             'top': Dot(circle.get_top()),
             'bottom': Dot(circle.get_bottom()),
         })
-        # dots = VGroup(*[
-        #     Dot(ORIGIN),
-        #     Dot(circle.get_top()),
-        #     Dot(circle.get_bottom()),
-        # ])
         arrow = Arrow(start=circle.get_center(), end=circle.point_at_angle(45*DEGREES), buff=0)
-        shapes = VGroup(*[
-            circle,
-            arrow,
-            ellipse,
-            dots,
-        ])
+        shapes = VDict({
+            'circle': circle,
+            'arrow': arrow,
+            'ellipse': ellipse,
+            'dots': dots,
+        })
         shapes.set_color(BLUE_D)
         dots.set_color(WHITE)
         dots['origin'].set_color(GRAY)
         arrow.set_color(GRAY)
-        
         
         text = VGroup(*[
             MathTex(r"|0\rangle").next_to(dots['top'], UP),
@@ -504,14 +677,28 @@ class EntanglementScene(Scene):
         ])
         
         
-        master_group = VGroup(shapes, text)
-        
-        q0 = master_group.copy()
-        q1 = master_group.copy()
-        
-        self.play(GrowFromCenter(q0), GrowFromCenter(q1))
-        self.play(q0.animate.move_to(LEFT*3), q1.animate.move_to(RIGHT*3))
-        
-        # self.play()
+        self.master_group = VDict({
+            'shapes': shapes,
+            'text': text,
+        })
+        self.add(self.master_group)
+    
+    def set_state_angle(self, angle: float):
+        return self.master_group['shapes']['arrow'].put_start_and_end_on(self.master_group['shapes']['circle'].get_center(), self.master_group['shapes']['circle'].point_at_angle(angle))
+
+
+class EntanglementScene(Scene):
+    def construct(self):
+        q0 = Qubit()
+        self.play(Create(q0))
+        self.play(q0.animate.set_state_angle(90*DEGREES))
+        self.play(q0.animate.set_state_angle(180*DEGREES))
         
         self.wait()
+
+
+
+
+
+# This is a qubit.
+# The quantum analog of a classical \emph{binary} bit.
