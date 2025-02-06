@@ -649,31 +649,48 @@ class IntroductionScene(Scene):
 
 
 class Qubit(VMobject):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        circle = Circle()
-        ellipse = Ellipse(width=circle.width, height=0.4).move_to(circle.get_center())
-        ellipse = DashedVMobject(ellipse, num_dashes=12, equal_lengths=False)
+    
+    config = {
+        'text_top_color': WHITE,
+        'text_bottom_color': WHITE,
+        'dots_origin_color': GRAY,
+        'dots_top_color': WHITE,
+        'dots_bottom_color': WHITE,
+        'arrow_color': GRAY,
+        'circle_color': BLUE,
+        'ellipse_color': BLUE,
+    }
+    
+    def __init__(self, **kwargs):
+        super().__init__()
+        
+        # Merge the default config with any user-provided config.
+        self.config.update(kwargs)
+        
+        
+        circle = Circle(color=self.config['circle_color'])
+        ellipse = Ellipse(width=circle.width, height=0.4, color=self.config['ellipse_color']).move_to(circle.get_center())
+        ellipse = DashedVMobject(ellipse, num_dashes=12, equal_lengths=False, color=self.config['ellipse_color'])
         dots = VDict({
-            'origin': Dot(ORIGIN),
-            'top': Dot(circle.get_top()),
-            'bottom': Dot(circle.get_bottom()),
+            'origin': Dot(ORIGIN, color=self.config['dots_origin_color']),
+            'top': Dot(circle.get_top(), color=self.config['dots_top_color']),
+            'bottom': Dot(circle.get_bottom(), color=self.config['dots_bottom_color']),
         })
-        arrow = Arrow(start=circle.get_center(), end=circle.point_at_angle(45*DEGREES), buff=0)
+        arrow = Arrow(start=circle.get_center(), end=circle.point_at_angle(45*DEGREES), buff=0, color=self.config['arrow_color'])
         shapes = VDict({
             'circle': circle,
             'arrow': arrow,
             'ellipse': ellipse,
             'dots': dots,
         })
-        shapes.set_color(BLUE_D)
-        dots.set_color(WHITE)
-        dots['origin'].set_color(GRAY)
-        arrow.set_color(GRAY)
+        # shapes.set_color(BLUE_D)
+        # dots.set_color(WHITE)
+        # dots['origin'].set_color(GRAY)
+        # arrow.set_color(GRAY)
         
         text = VGroup(*[
-            MathTex(r"|0\rangle").next_to(dots['top'], UP),
-            MathTex(r"|1\rangle").next_to(dots['bottom'], DOWN),
+            MathTex(r"|0\rangle", color=self.config['text_top_color']).next_to(dots['top'], UP),
+            MathTex(r"|1\rangle", color=self.config['text_bottom_color']).next_to(dots['bottom'], DOWN),
         ])
         
         
@@ -687,12 +704,163 @@ class Qubit(VMobject):
         return self.master_group['shapes']['arrow'].put_start_and_end_on(self.master_group['shapes']['circle'].get_center(), self.master_group['shapes']['circle'].point_at_angle(angle))
 
 
-class EntanglementScene(Scene):
+
+
+class EntangledQubits(VMobject):
+    
+    config = {
+        'qubit_0': Qubit.config.copy(),
+        'qubit_1': Qubit.config.copy(),
+        'wave_0_color': BLUE_C,
+        'wave_1_color': BLUE_E,
+    }
+    
+    def __init__(self, **kwargs):
+        super().__init__()
+        
+        # Merge the default config with any user-provided config.
+        self.config.update(kwargs)
+        
+        # 2 qubits within object.
+        self.qubits: VGroup[Qubit] = VGroup(*[
+            Qubit(**self.config['qubit_0']),
+            Qubit(**self.config['qubit_1']),
+        ])
+        self.qubits[0].shift(LEFT*3)
+        self.qubits[1].shift(RIGHT*3)
+        
+        # Tracker for animating the entanglement waves.
+        self.tracker = ValueTracker(0)
+        
+        # 2 wave functions to represent entanglement.
+        self.wave_graphs = VGroup(*[
+            always_redraw(lambda: FunctionGraph(lambda x: 0.5*np.sin(4*x + self.tracker.get_value()), color=self.config['wave_0_color'], x_range=[self.qubits[0].get_x(RIGHT), self.qubits[1].get_x(LEFT)])),
+            always_redraw(lambda: FunctionGraph(lambda x: 0.5*np.sin(4*x - self.tracker.get_value() + 180*DEGREES), color=self.config['wave_1_color'], x_range=[self.qubits[0].get_x(RIGHT), self.qubits[1].get_x(LEFT)])),
+        ])
+        
+        self.add(self.qubits, self.wave_graphs)
+    
+    def animate_waves_toggle(self) -> AnimationGroup:
+        """Animates entanglement waves either forward or backward, depending on the current tracker value."""
+        
+        if self.tracker.get_value() == 0:
+            return self.tracker.animate(run_time=1, rate_func=linear).set_value(4*np.pi)
+        else:
+            return self.tracker.animate(run_time=1, rate_func=linear).set_value(0)
+
+
+
+class QubitScene(Scene):
     def construct(self):
         q0 = Qubit()
         self.play(Create(q0))
         self.play(q0.animate.set_state_angle(90*DEGREES))
         self.play(q0.animate.set_state_angle(180*DEGREES))
+        
+        self.wait()
+
+
+class EntanglementScene(Scene):
+    def construct(self):
+        e = EntangledQubits(
+            qubit_0={
+                'circle_color': PURPLE,
+                'ellipse_color': PURPLE,
+            },
+            qubit_1={
+                'circle_color': PURPLE,
+                'ellipse_color': PURPLE,
+            }
+        )
+        self.play(Write(e))
+        
+        # self.play(e.animate_waves_toggle())
+        # self.play(e.animate_waves_toggle())
+        # self.play(e.animate_waves_toggle())
+        # self.play(e.animate_waves_toggle())
+        
+        
+        
+        self.play(
+            e.animate_waves_toggle(),
+            e.qubits[0].animate.set_state_angle(90*DEGREES),
+            e.qubits[1].animate.set_state_angle(270*DEGREES),
+        )
+        self.play(
+            e.animate_waves_toggle(),
+            e.qubits[0].animate.set_state_angle(180*DEGREES),
+            e.qubits[1].animate.set_state_angle(0*DEGREES),
+        )
+        self.play(
+            e.animate_waves_toggle(),
+            e.qubits[0].animate.set_state_angle(270*DEGREES),
+            e.qubits[1].animate.set_state_angle(90*DEGREES),
+        )
+        self.play(
+            e.animate_waves_toggle(),
+            e.qubits[0].animate.set_state_angle(45*DEGREES),
+            e.qubits[1].animate.set_state_angle(225*DEGREES),
+        )
+        
+        self.wait()
+        
+        
+        
+        
+    def construct_old(self):
+        q0 = Qubit()
+        q1 = Qubit()
+        self.play(Create(q0))
+        self.play(q0.animate.shift(LEFT*4), GrowFromCenter(q1), q1.animate.shift(RIGHT*4))
+        # self.play(q1.animate.shift(RIGHT*2))
+        # self.play(q0.animate.set_state_angle(90*DEGREES))
+        # self.play(q0.animate.set_state_angle(180*DEGREES))
+        
+        
+        t = ValueTracker(0)
+        
+        
+        # wave
+        
+        
+        
+        
+        
+        
+        # wave_width = abs(q1.get_x(LEFT) - q0.get_x(RIGHT))
+        # wave_freq = 2 * np.pi / wave_width
+        
+        
+        # wave_functions = [
+        #     lambda x: 0.5*np.sin(4*x - t.get_value()),
+        #     lambda x: 0.5*np.tan(4*x - t.get_value()),
+        # ]
+        wave_graphs = [
+            always_redraw(lambda: FunctionGraph(lambda x: 0.5*np.sin(4*x - t.get_value()), color=BLUE_C, x_range=[q0.get_x(RIGHT), q1.get_x(LEFT)])),
+            always_redraw(lambda: FunctionGraph(lambda x: 0.5*np.sin(4*x - t.get_value() + 180*DEGREES), color=BLUE_E, x_range=[q0.get_x(RIGHT), q1.get_x(LEFT)])),
+            # always_redraw(lambda: FunctionGraph(wf, color=BLUE, x_range=[q0.get_x(RIGHT), q1.get_x(LEFT)])) 
+            # for wf in wave_functions
+        ]
+        
+        self.add(*wave_graphs)
+        
+        
+        # wave_function = lambda x: 0.5*np.sin(4*x - t.get_value())
+        # wave_graph = always_redraw(lambda: FunctionGraph(wave_function, color=BLUE, x_range=[q0.get_x(RIGHT), q1.get_x(LEFT)]))
+        #########
+        # wave_graph.stretch_to_fit_width(abs(q1.get_x(LEFT) - q0.get_x(RIGHT)))
+        # wave_graph.move_to((q0.get_x(RIGHT) + q1.get_x(LEFT))/2 * RIGHT)
+        # wave.align_to(q0, RIGHT)
+        # wave.align_to(q1, LEFT)
+        # self.play(Write(wave_graph))
+        #######
+        # self.add(wave_graph)
+        
+        # self.play(t.animate(run_time=6).set_value(t.get_value()*100))
+        self.play(t.animate.set_value(4*np.pi), run_time=1, rate_func=linear)
+        self.play(t.animate.set_value(0), run_time=1, rate_func=linear)
+        self.play(t.animate.set_value(4*np.pi), run_time=1, rate_func=linear)
+        self.play(t.animate.set_value(0), run_time=1, rate_func=linear)
         
         self.wait()
 
