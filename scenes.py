@@ -283,3 +283,187 @@ class EnvironmentIntroduction(Scene):
         
         
         self.wait()
+
+
+
+
+
+class IntroductionScene(Scene):
+    def construct(self):
+        
+
+        # title_short = Text("eQMARL", t2c={'Q': PURPLE}).scale(1.5)
+        # self.play(Write(title_short))
+        
+        # title_long = Text("Entangled Quantum Multi-Agent Reinforcement Learning", t2c={'Quantum': PURPLE})
+        
+        # title_long = title_long.scale(0.75)
+        # title_long.next_to(title_short, DOWN, buff=0.5)
+
+        # self.play(ReplacementTransform(title_short[0], title_long[0:9]))
+        # self.play(ReplacementTransform(title_short[1], title_long[9:16]))
+        # self.play(ReplacementTransform(title_short[2:4], title_long[16:27]))
+        # self.play(ReplacementTransform(title_short[4], title_long[27:40]))
+        # self.play(ReplacementTransform(title_short[5], title_long[40:]))
+        
+        
+        def style1():
+        
+            title_long = Text("Entangled Quantum Multi-Agent Reinforcement Learning", t2c={'Quantum': PURPLE}).scale(0.8)
+            
+            title_short = Text("eQMARL", t2c={'Q': PURPLE}).scale(1.5)
+            title_short.next_to(title_long, UP, buff=0.5)
+            
+            self.play(Write(title_long[0:9]), Write(title_short[0]), run_time=0.75)
+            self.play(Write(title_long[9:16]), Write(title_short[1]), run_time=0.75)
+            self.play(Write(title_long[16:27]), Write(title_short[2:4]), run_time=0.75)
+            self.play(Write(title_long[27:40]), Write(title_short[4]), run_time=0.75)
+            self.play(Write(title_long[40:]), Write(title_short[5]), run_time=0.75)
+            
+            self.play(ReplacementTransform(title_long, title_short[1]))
+            self.play(title_short.animate.to_edge(UP))
+            
+            # self.play(
+            #     title_short.animate.to_edge(UP),
+            #     FadeOut(title_long),
+            # )
+        
+        
+        def style2():
+            title_long = Text("Entangled Quantum Multi-Agent Reinforcement Learning", t2c={'Quantum': PURPLE}).scale(0.8)
+            self.play(Write(title_long), run_time=2)
+            title_long_words = [
+                title_long[0:9],
+                title_long[9:16],
+                title_long[16:27],
+                title_long[27:40],
+                title_long[40:],
+            ]
+            
+            title_short = Text("eQMARL", t2c={'Q': PURPLE}).scale(1.5)
+            title_short_letters = [
+                title_short[0],
+                title_short[1],
+                title_short[2:4],
+                title_short[4],
+                title_short[5],
+            ]
+            # title_short_letters[0].next_to(title_long_words[1], LEFT)
+            # title_short_letters[1].next_to(title_long_words[2], LEFT)
+            # title_short_letters[3].next_to(title_long_words[3], LEFT)
+            # title_short_letters[4].next_to(title_long_words[3], RIGHT)
+            
+            title_short_letters[0].next_to(title_long_words[1], LEFT)
+            self.play(ReplacementTransform(title_long_words[0], title_short_letters[0]))
+            
+            self.play(ReplacementTransform(title_long_words[1], title_short_letters[1]))
+            # title_short_letters[1].next_to(title_short_letters[0], RIGHT)
+            # self.play(
+            #     ReplacementTransform(title_long_words[1], title_short_letters[1]),
+            #     title_short[0:2].animate.next_to(title_long_words[2], LEFT),
+            #     )
+            
+            
+            self.play(ReplacementTransform(title_long_words[2], title_short_letters[2]))
+            self.play(ReplacementTransform(title_long_words[3], title_short_letters[3]))
+            self.play(ReplacementTransform(title_long_words[4], title_short_letters[4]))
+            
+            self.play(title_short.animate.to_edge(UP))
+        
+        
+        def style3():
+            title_short = Text("eQMARL", t2c={'Q': PURPLE})
+            title_short = title_short.scale(1.5)
+            title_short_glyphs = [
+                title_short[0],
+                title_short[1],
+                title_short[2:4],
+                title_short[4],
+                title_short[5],
+            ]
+            
+            underlines = [Underline(glyph, color=RED) for glyph in title_short_glyphs]
+            
+            title_long = Text("Entangled Quantum Multi-Agent Reinforcement Learning", t2c={'Quantum': PURPLE})
+            title_long = title_long.scale(0.75)
+            title_long.next_to(title_short, DOWN, buff=0.5)
+            title_long_glyphs = [
+                title_long[0:9],
+                title_long[9:16],
+                title_long[16:27],
+                title_long[27:40],
+                title_long[40:],
+            ]
+            
+            self.play(Write(title_short))
+            self.play(
+                GrowFromPoint(title_long_glyphs[0], title_short_glyphs[0].get_center()),
+                GrowFromCenter(underlines[0]),
+                )
+            self.play(
+                GrowFromPoint(title_long_glyphs[1], title_short_glyphs[1].get_center()),
+                ReplacementTransform(underlines[0], underlines[1]),
+            )
+            self.play(
+                GrowFromPoint(title_long_glyphs[2], title_short_glyphs[2].get_center()),
+                ReplacementTransform(underlines[1], underlines[2]),
+            )
+            self.play(
+                GrowFromPoint(title_long_glyphs[3], title_short_glyphs[3].get_center()),
+                ReplacementTransform(underlines[2], underlines[3]),
+            )
+            self.play(
+                GrowFromPoint(title_long_glyphs[4], title_short_glyphs[4].get_center()),
+                ReplacementTransform(underlines[3], underlines[4]),
+            )
+            self.play(ShrinkToCenter(underlines[-1]), ShrinkToCenter(title_long), run_time=0.25)
+            ######
+            # self.play(ReplacementTransform(title_short_glyphs[0], title_long_glyphs[0]))
+            # self.play(ReplacementTransform(title_short_glyphs[1], title_long_glyphs[1]))
+            # self.play(ReplacementTransform(title_short_glyphs[2], title_long_glyphs[2]))
+            # self.play(ReplacementTransform(title_short_glyphs[3], title_long_glyphs[3]))
+            # self.play(ReplacementTransform(title_short_glyphs[4], title_long_glyphs[4]))
+            ######
+            self.play(title_short.animate.to_edge(UP))
+        
+        
+        ######
+        
+        # style1()
+        # style2()
+        style3()
+        
+        # title_long = Text("Entangled Quantum Multi-Agent Reinforcement Learning", t2c={'Quantum': PURPLE}).scale(0.8)
+        # self.play(Write(title_long), run_time=2)
+        
+        # # self.play(Write(title_long[0:9]), run_time=0.75)
+        # # self.play(Write(title_long[9:16]), run_time=0.75)
+        # # self.play(Write(title_long[16:27]), run_time=0.75)
+        # # self.play(Write(title_long[27:40]), run_time=0.75)
+        # # self.play(Write(title_long[40:]), run_time=0.75)
+        
+        
+        # title_short = Text("eQMARL", t2c={'Q': PURPLE}).scale(1.5)
+        # # title_short.next_to(title_long, UP, buff=0.5)
+        # # title_short.next_to(title_long, DOWN, buff=0.5)
+        # # self.play(ReplacementTransform(title_long[0:9], title_short[0]))
+        # # self.play(ReplacementTransform(title_long[9:16], title_short[1]))
+        # # self.play(ReplacementTransform(title_long[16:27], title_short[2:4]))
+        # # self.play(ReplacementTransform(title_long[27:40], title_short[4]))
+        # # self.play(ReplacementTransform(title_long[40:], title_short[5]))
+        
+        # # self.play(ReplacementTransform(title_long, title_short), run_time=1.5)
+        
+        
+        # self.play(ReplacementTransform(title_long[0:9], title_short[0]))
+        # self.play(ReplacementTransform(title_long[9:16], title_short[1]))
+        # self.play(ReplacementTransform(title_long[16:27], title_short[2:4]))
+        # self.play(ReplacementTransform(title_long[27:40], title_short[4]))
+        # self.play(ReplacementTransform(title_long[40:], title_short[5]))
+        
+        
+        # self.play(title_short.animate.to_edge(UP))
+        
+        
+        
+        self.wait()
