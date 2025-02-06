@@ -467,3 +467,51 @@ class IntroductionScene(Scene):
         
         
         self.wait()
+
+
+
+class EntanglementScene(Scene):
+    def construct(self):
+        circle = Circle()
+        ellipse = Ellipse(width=circle.width, height=0.4).move_to(circle.get_center())
+        ellipse = DashedVMobject(ellipse, num_dashes=12, equal_lengths=False)
+        dots = VDict({
+            'origin': Dot(ORIGIN),
+            'top': Dot(circle.get_top()),
+            'bottom': Dot(circle.get_bottom()),
+        })
+        # dots = VGroup(*[
+        #     Dot(ORIGIN),
+        #     Dot(circle.get_top()),
+        #     Dot(circle.get_bottom()),
+        # ])
+        arrow = Arrow(start=circle.get_center(), end=circle.point_at_angle(45*DEGREES), buff=0)
+        shapes = VGroup(*[
+            circle,
+            arrow,
+            ellipse,
+            dots,
+        ])
+        shapes.set_color(BLUE_D)
+        dots.set_color(WHITE)
+        dots['origin'].set_color(GRAY)
+        arrow.set_color(GRAY)
+        
+        
+        text = VGroup(*[
+            MathTex(r"|0\rangle").next_to(dots['top'], UP),
+            MathTex(r"|1\rangle").next_to(dots['bottom'], DOWN),
+        ])
+        
+        
+        master_group = VGroup(shapes, text)
+        
+        q0 = master_group.copy()
+        q1 = master_group.copy()
+        
+        self.play(GrowFromCenter(q0), GrowFromCenter(q1))
+        self.play(q0.animate.move_to(LEFT*3), q1.animate.move_to(RIGHT*3))
+        
+        # self.play()
+        
+        self.wait()
