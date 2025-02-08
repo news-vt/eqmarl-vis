@@ -472,22 +472,101 @@ class DiagramScene(Scene):
         ###
         # Quantum circuit diagram.
         ###
+        # g0 = make_quantum_gate_1qubit("$X$")
+        # g1 = make_quantum_gate_1qubit(r"$R^{\theta}$").next_to(g0, buff=0)
+        # g2 = make_quantum_gate_1qubit("$Z$")
+        # self.add(g0, g1)
         
-        # box = Square(side_length=2)
-        # label = Text
         
-        # label = Tex("$X$")
-        # box = SurroundingRectangle(label, color=WHITE, buff=0.25)
-        # lines = VGroup(
-        #     Line(start=box.get_left(), end=LEFT),
-        #     Line(start=box.get_right(), end=RIGHT),
-        # )
         
-        # gate = VGroup(label, box, lines)
+        ###
+        # Block diagram.
+        ###
         
-        g0 = make_quantum_gate_1qubit("$X$")
-        g1 = make_quantum_gate_1qubit(r"$R^{\theta}$").next_to(g0, buff=0)
+        def create_bounded_block(mobject: VMobject, **kwargs):
+            """Surrounds anything given with a rectangle.
+            
+            This is helpful when creating elements inline.
+            The items given and the bounding box will be combined and returned as a `VDict` with keys "box" and "object".
+            """
+            # Default configuration for `SurroundingRectangle`.
+            config = dict(
+                color=WHITE,
+                corner_radius=0.1,
+                buff=0.2,
+            )
+            config.update(kwargs)
+            box = SurroundingRectangle(mobject, **config)
+            return VDict({
+                'box': box,
+                'object': mobject,
+            })
         
-        self.add(g0, g1)
+        # def create_block(name: str, text_kwargs: dict = {}, box_kwargs: dict = {}):
+        #     label = Tex(name, font_size=20, **text_kwargs)
+        #     # box = Square()
+        #     # box.surround(label, stretch=True, buff=0.5)
+        #     box = SurroundingRectangle(label, color=WHITE, buff=0.2, **box_kwargs)
+        #     return VGroup(label, box)
+        
+        
+        
+        # b0 = SurroundingRectangle(Tex("A", font_size=26))
+        # b1 = SurroundingRectangle(Tex("B", font_size=26))
+        # b2 = SurroundingRectangle(Tex("C", font_size=26))
+        # b0 = create_block("This is\na multi-line\nblock\nwith math $x=2$", text_kwargs=dict(justify=True)).to_edge(LEFT)
+        # b0 = create_bounded_block(Text("A", font_size=20), color=WHITE, buff=0.2).to_edge(LEFT)
+        b0 = create_bounded_block(VGroup(Circle().shift(RIGHT), Square())).to_edge(LEFT)
+        b1 = create_bounded_block(Text("Central Critic3", color=WHITE, font_size=36)).next_to(b0, RIGHT*3)
+        b2 = create_bounded_block(Paragraph("This is a\nMulti line", font_size=36, alignment='center')).next_to(b1, RIGHT*3)
+        
+        print(f"{b1['object'].color=}, {b1['object'].get_color()=}")
+        
+        nodes = VGroup(b0, b1, b2)
+        
+        e0 = Arrow(b0.get_right(), b1.get_left(), buff=0)
+        e1 = Arrow(b1.get_right(), b2.get_left(), buff=0)
+        edges = VGroup(e0, e1)
+        
+        self.add(nodes)
+        self.add(edges)
+        
+        
         
         self.wait(1)
+
+
+### FROM CHATGPT.
+class BlockDiagramGraphShapes(Scene):
+    def construct(self):
+        # Define nodes and edges
+        nodes = ["A", "B", "C"]
+        edges = [("A", "B"), ("B", "C")]
+
+        # Define node positions
+        # layout = {"A": LEFT * 3, "B": ORIGIN, "C": RIGHT * 3}
+        layout = {"A": LEFT, "B": ORIGIN, "C": RIGHT}
+
+        # Custom shapes for nodes
+        shapes = {
+            "A": Square(),
+            "B": Square(),
+            "C": Square(),
+            # "A": Rectangle(width=2, height=1, color=BLUE).move_to(layout["A"]),
+            # "B": Circle(radius=0.7, color=GREEN).move_to(layout["B"]),
+            # "C": Ellipse(width=2, height=1, color=RED).move_to(layout["C"]),
+        }
+        
+        # Create the graph
+        graph = DiGraph(nodes, edges, layout=layout, edge_config={"stroke_width": 3}, vertex_mobjects=shapes)
+
+        # Labels for nodes
+        labels = {node: Text(node).move_to(shapes[node]) for node in nodes}
+
+        # Add to scene
+        self.play(Create(graph))
+        for node in nodes:
+        #     self.play(Transform(graph.vertices[node], shapes[node]))
+            self.play(Write(labels[node]))
+
+        self.wait(2)
