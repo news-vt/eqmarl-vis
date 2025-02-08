@@ -1,5 +1,9 @@
+import os
+import tempfile
 from typing import Callable
+
 from manim import *
+import segno
 
 # config.disable_caching = True
 # config.quality = 'low_quality'
@@ -7,6 +11,30 @@ from manim import *
 # Tool for creating voiceovers with Manim: https://www.manim.community/plugin/manim-voiceover/
 
 # Example of making a neural network with Manim: https://medium.com/@andresberejnoi/using-manim-and-python-to-create-animations-like-3blue1brown-andres-berejnoi-34f755606761
+
+
+class SegnoQRCodeImageMobject(ImageMobject):
+    """Converts a QR Code generated using `segno` as a Manim `ImageMobject`."""
+    def __init__(self, qr: segno.QRCode, **kwargs):
+
+        # qr = segno.make("https://arxiv.org/abs/2405.17486", micro=False, error='H')
+        
+        config = {
+            'light': None,
+            'dark': WHITE.to_hex(),
+            'border': 0,
+            'scale': 100,
+        }
+        config.update(kwargs)
+        # default_save_config.update(save_kwargs)
+
+        with tempfile.NamedTemporaryFile(suffix='.png') as tmpfile:
+            tmpfile_name = tmpfile.name
+            qr.save(tmpfile_name, **config)
+            super().__init__(tmpfile_name)
+        
+        # Ensure the temporary file does not exist anymore.
+        assert not os.path.exists(tmpfile_name)
 
 
 class Qubit(VMobject):
@@ -93,7 +121,8 @@ class DemoForICAB(PausableScene):
         sections: list[tuple[Callable, dict]] = [
             (self.section_title, dict(name="Title", skip_animations=True)),
             (self.section_motivation, dict(name="Motivation", skip_animations=True)),
-            (self.section_scenario, dict(name="Scenario", skip_animations=False)),
+            # (self.section_scenario, dict(name="Scenario", skip_animations=True)),
+            (self.section_outro, dict(name="Outro", skip_animations=False)),
             (self.section_placeholder, dict(name="Placeholder", skip_animations=False)),
         ]
         for method, section_kwargs in sections:
@@ -139,8 +168,8 @@ class DemoForICAB(PausableScene):
         subtitle_text = Text("Coordination without Communication", font_size=28)
         subtitle_text.next_to(eqmarl_full, DOWN, buff=0.5)
         
-        attribution_text = Text("A. DeRieux & W. Saad (2025)", font_size=12)
-        attribution_text.to_edge(DOWN, buff=0.1)
+        self.attribution_text = Text("A. DeRieux & W. Saad (2025)", font_size=12)
+        self.attribution_text.to_edge(DOWN, buff=0.1)
         
         # Combine the glyphs.
         eqmarl_glyphs = list(zip(eqmarl_acronym_glyphs, eqmarl_full_glyphs))
@@ -149,7 +178,7 @@ class DemoForICAB(PausableScene):
         self.play(FadeIn(eqmarl_acronym))
         self.play(Write(eqmarl_full))
         self.play(Write(subtitle_text))
-        self.play(Create(attribution_text))
+        self.play(Create(self.attribution_text))
         self.play(FadeOut(eqmarl_full), FadeOut(subtitle_text), eqmarl_acronym.animate.scale(0.5).to_edge(UL))
 
 
@@ -450,6 +479,29 @@ class DemoForICAB(PausableScene):
         
         # self.play(drone.animate.shift(RIGHT*2))
         # self.play(drone.animate.rotate(45*DEGREES))
+    
+    def section_outro(self):
+        
+        qr = segno.make("https://arxiv.org/abs/2405.17486", micro=False, error='H')
+        img = SegnoQRCodeImageMobject(qr, scale=100, dark=GRAY_A.to_hex(), finder_dark=PURPLE.to_hex(), border=0, light=None).scale(0.1)
+        
+        t0 = Text("Paper is available on arXiv", font_size=24)
+        
+        
+        self.play(self.eqmarl_acronym.animate.scale(2).move_to(ORIGIN).shift(UP*1.5))
+        
+        img.next_to(self.eqmarl_acronym, DOWN)
+        self.play(FadeIn(img))
+        
+        t0.next_to(img, DOWN)
+        self.play(Write(t0))
+        
+        t1 = Text("Alexander DeRieux & Walid Saad (2025)", font_size=24).next_to(t0, DOWN)
+        self.play(ReplacementTransform(self.attribution_text, t1))
+        
+        self.play(Wiggle(img))
+        
+        self.wait(1)
 
 
 def make_quantum_gate_1qubit(name: str, color: ManimColor = WHITE):
@@ -532,9 +584,10 @@ class DiagramScene(Scene):
         self.add(edges)
         
         
-        
         self.wait(1)
 
+
+# tmpfile idea: https://stackoverflow.com/questions/3924117/how-to-use-tempfile-namedtemporaryfile-in-python
 
 ### FROM CHATGPT.
 class BlockDiagramGraphShapes(Scene):
@@ -569,4 +622,85 @@ class BlockDiagramGraphShapes(Scene):
         #     self.play(Transform(graph.vertices[node], shapes[node]))
             self.play(Write(labels[node]))
 
+
         self.wait(2)
+
+
+
+
+class QRCodeScene(Scene):
+    def construct(self):
+        
+        import io
+        import os
+        import segno
+        import tempfile
+        import qrcode_artistic
+        # img = segno.make("https://arxiv.org/abs/2405.17486", micro=False, error='H')
+        # print(f"{img.designator=}")
+        
+        
+        qr = segno.make("https://arxiv.org/abs/2405.17486", micro=False, error='H')
+        # qr = qr.to_pil(dark=RED.to_hex(), data_dark=YELLOW.to_hex(), light=None, scale=100, border=0)
+        img = SegnoQRCodeImageMobject(qr, scale=100, dark=WHITE.to_hex(), finder_dark=RED.to_hex(), border=0, light=None).scale(0.1)
+        # self.add(img)
+        
+        
+        
+        # # staticfilename = os.path.expanduser("~/Downloads/testimg.png")
+        # # img.save(staticfilename, scale=100, light=None, dark=WHITE.to_hex(), border=0)
+        # # print(f"{WHITE.to_hex()=}")
+        
+        # with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmpfile:
+        #     tmpfile_name = tmpfile.name
+        #     img.save(tmpfile_name, scale=100, light=None, dark=WHITE.to_hex(), border=0)
+        
+        
+        
+        
+        # # # img = qrcode.to_pil(scale=10, dark='white')
+        # # # img = img.convert("RGBA")
+        # # # tmpfile = io.BytesIO()
+        # # # img.save(tmpfile, format='PNG')
+        # # # tmpfile.seek(0)
+        # # # tmpfile = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+        # # with tempfile.NamedTemporaryFile(suffix='.svg', delete=False) as tmpfile:
+        # #     tmpfile_name = tmpfile.name
+        # #     # img.save(tmpfile, scale=10, kind='png')
+        # #     # img.save(tmpfile, kind='svg', light=None, dark='white')
+        # #     img.save(tmpfile, kind='svg')
+        # # # qrcode_img = ImageMobject(tmpfile_name)
+        # # # qrcode_img = SVGMobject(tmpfile_name).scale(2)
+        
+        
+        # # qrcode_img = SVGMobject(tmpfile_name, color=WHITE)
+        # # qrcode_img = SVGMobject(staticfilename)
+        # # qrcode_img = ImageMobject(staticfilename).scale(.1)
+        # qrcode_img = ImageMobject(tmpfile_name).scale(.1)
+        # # qrcode_img.set_fill(WHITE)
+        # # qrcode_img.set_stroke(WHITE, width=1)
+        # # qrcode_img[0].set_style(fill_opacity=1,stroke_width=1,stroke_opacity=0,fill_color=RED_A)
+        # # surr = SurroundingRectangle(qrcode_img, buff=0)
+        # # print(qrcode_img.get_all_points())
+        # self.add(qrcode_img)
+        # # self.play(GrowFromCenter(qrcode_img))
+        
+        t0 = Text("Paper is available on arXiv", font_size=24)
+        t0.next_to(img, UP)
+        
+        self.play(Write(t0), FadeIn(img))
+        self.play(Wiggle(img))
+        self.play(FadeOut(t0), FadeOut(img))
+        
+        
+        # # print(tmpfile_name)
+        # # input()
+        
+        
+        # # print(tmpfile_name)
+        # os.unlink(tmpfile_name)
+        # # assert not os.path.exists(tmpfile_name)
+        # # print(f"{os.path.exists(tmpfile_name)=}")
+        
+        
+        self.wait(1)

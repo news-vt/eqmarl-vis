@@ -1,2 +1,4 @@
 ipykernel
 manim
+segno
+qrcode-artistic
