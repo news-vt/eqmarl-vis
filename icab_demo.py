@@ -119,8 +119,8 @@ class DemoForICAB(PausableScene):
         # Each section should cleanup any objects after itself if they are not to be used again.
         # Sections can be tested individually, to do this set `skip_animations=True` to turn off all other sections not used (note that the section will still be generated, allowing objects to move to their final position for use with future sections in the pipeline).
         sections: list[tuple[Callable, dict]] = [
-            (self.section_title, dict(name="Title", skip_animations=True)),
-            (self.section_motivation, dict(name="Motivation", skip_animations=True)),
+            (self.section_title, dict(name="Title", skip_animations=False)),
+            (self.section_motivation, dict(name="Motivation", skip_animations=False)),
             # (self.section_scenario, dict(name="Scenario", skip_animations=True)),
             (self.section_outro, dict(name="Outro", skip_animations=False)),
             (self.section_placeholder, dict(name="Placeholder", skip_animations=False)),
@@ -168,6 +168,9 @@ class DemoForICAB(PausableScene):
         subtitle_text = Text("Coordination without Communication", font_size=28)
         subtitle_text.next_to(eqmarl_full, DOWN, buff=0.5)
         
+        attribution_text_full = Text("Alexander DeRieux & Walid Saad (2025)", font_size=24)
+        attribution_text_full.next_to(subtitle_text, DOWN, buff=0.5)
+        
         self.attribution_text = Text("A. DeRieux & W. Saad (2025)", font_size=12)
         self.attribution_text.to_edge(DOWN, buff=0.1)
         
@@ -178,8 +181,13 @@ class DemoForICAB(PausableScene):
         self.play(FadeIn(eqmarl_acronym))
         self.play(Write(eqmarl_full))
         self.play(Write(subtitle_text))
-        self.play(Create(self.attribution_text))
-        self.play(FadeOut(eqmarl_full), FadeOut(subtitle_text), eqmarl_acronym.animate.scale(0.5).to_edge(UL))
+        
+        # self.play(Create(self.attribution_text))
+        self.play(Write(attribution_text_full))
+        
+        self.medium_pause()
+        
+        self.play(FadeOut(eqmarl_full), FadeOut(subtitle_text), eqmarl_acronym.animate.scale(0.5).to_edge(UL), ReplacementTransform(attribution_text_full, self.attribution_text))
 
 
     def section_motivation(self):
