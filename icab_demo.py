@@ -6,6 +6,7 @@ from manim import *
 
 # Tool for creating voiceovers with Manim: https://www.manim.community/plugin/manim-voiceover/
 
+# Example of making a neural network with Manim: https://medium.com/@andresberejnoi/using-manim-and-python-to-create-animations-like-3blue1brown-andres-berejnoi-34f755606761
 
 
 class Qubit(VMobject):
@@ -449,3 +450,44 @@ class DemoForICAB(PausableScene):
         
         # self.play(drone.animate.shift(RIGHT*2))
         # self.play(drone.animate.rotate(45*DEGREES))
+
+
+def make_quantum_gate_1qubit(name: str, color: ManimColor = WHITE):
+    label = Tex(name, color=color, font_size=36)
+    box = SurroundingRectangle(label, color=color, buff=0.25)
+    lines = VDict({
+        'left': Line(start=box.get_left(), end=LEFT, color=color),
+        'right': Line(start=box.get_right(), end=RIGHT, color=color),
+    })
+    return VDict({
+        'label': label,
+        'box': box,
+        'lines': lines,
+    })
+
+
+class DiagramScene(Scene):
+    def construct(self):
+        
+        ###
+        # Quantum circuit diagram.
+        ###
+        
+        # box = Square(side_length=2)
+        # label = Text
+        
+        # label = Tex("$X$")
+        # box = SurroundingRectangle(label, color=WHITE, buff=0.25)
+        # lines = VGroup(
+        #     Line(start=box.get_left(), end=LEFT),
+        #     Line(start=box.get_right(), end=RIGHT),
+        # )
+        
+        # gate = VGroup(label, box, lines)
+        
+        g0 = make_quantum_gate_1qubit("$X$")
+        g1 = make_quantum_gate_1qubit(r"$R^{\theta}$").next_to(g0, buff=0)
+        
+        self.add(g0, g1)
+        
+        self.wait(1)
