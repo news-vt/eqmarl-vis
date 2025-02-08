@@ -92,7 +92,7 @@ class DemoForICAB(PausableScene):
         sections: list[tuple[Callable, dict]] = [
             (self.section_title, dict(name="Title", skip_animations=True)),
             (self.section_motivation, dict(name="Motivation", skip_animations=True)),
-            (self.section_scenario, dict(name="Scenario", skip_animations=True)),
+            (self.section_scenario, dict(name="Scenario", skip_animations=False)),
             (self.section_placeholder, dict(name="Placeholder", skip_animations=False)),
         ]
         for method, section_kwargs in sections:
@@ -193,29 +193,40 @@ class DemoForICAB(PausableScene):
         # Create the entangled qubit pair.
         self.play(Write(entangled_group))
 
-        t1 = Text(
+        t1 = MarkupText(
             (
-                "we can couple the behavior of two AI agents"
+                f"we can couple the behavior of two <span fgcolor=\"{YELLOW}\">AI drones</span>"
                 # "to enable coordination without communication."
             ),
             font_size=28).next_to(entangled_group, DOWN, buff=0.5)
         # self.add(t1)
         self.play(Write(t1))
         
+        #####
         agents = VGroup(*[
             Triangle(color=PURPLE, fill_opacity=0.5).scale(0.5).rotate(-90*DEGREES).next_to(t1, DOWN, buff=0.5).shift(LEFT*2.5),
             Triangle(color=BLUE, fill_opacity=0.5).scale(0.5).rotate(+90*DEGREES).next_to(t1, DOWN, buff=0.5).shift(RIGHT*2.5),
         ])
+        ####
+        # agents = VGroup(*[
+        #     SVGMobject("assets/images/drone.svg").scale(0.5).next_to(t1, DOWN, buff=0.5).shift(LEFT*2.5),
+        #     SVGMobject("assets/images/drone.svg").scale(0.5).next_to(t1, DOWN, buff=0.5).shift(RIGHT*2.5),
+        # ])
+        # # Give all drones a grey outline to make them stand out.
+        # for d in agents:
+        #     path_outline = d.family_members_with_points()[0]
+        #     path_outline.set_stroke(GRAY, 1)
+        #####
         agent_labels = VGroup(*[
-            Text("Agent A", font_size=20, color=GRAY).next_to(agents[0], LEFT, buff=0.2),
-            Text("Agent B", font_size=20, color=GRAY).next_to(agents[1], RIGHT, buff=0.2),
+            Text("Drone A", font_size=20, color=GRAY).next_to(agents[0], LEFT, buff=0.2),
+            Text("Drone B", font_size=20, color=GRAY).next_to(agents[1], RIGHT, buff=0.2),
         ])
         
         # agent0 = Triangle(color=RED, fill_opacity=0.5).scale(0.5).rotate(-90*DEGREES).next_to(t1, DOWN, buff=0.5).shift(LEFT*2)
         # agent1 = Triangle(color=BLUE, fill_opacity=0.5).scale(0.5).rotate(+90*DEGREES).next_to(t1, DOWN, buff=0.5).shift(RIGHT*2)
         # self.add(agent0, agent1)
         # self.play(Write(agent0), Write(agent1))
-        self.play(*[Write(agents), Write(agent_labels)])
+        self.play(*[GrowFromCenter(agents), Write(agent_labels)])
         
         
         t2 = MarkupText(f"to enable <span fgcolor=\"{GREEN}\">coordination</span> without <span fgcolor=\"{RED}\">communication</span>.", font_size=28).next_to(agents, DOWN, buff=0.5)
@@ -245,8 +256,8 @@ class DemoForICAB(PausableScene):
         
         # self.play(GrowFromCenter(t2[27:]), Write(notcircle), Write(notline), Write(nottext))
         
-        agent0_text = Text("\"Turn LEFT\"", font_size=18, color=GREEN).next_to(agents[0], UR, buff=-0.1)
-        agent1_text = Text("\"Turn RIGHT\"", font_size=18, color=GREEN).next_to(agents[1], UL, buff=-0.1)
+        agent0_text = Text("\"Turn LEFT\"", font_size=18, color=GREEN).next_to(agents[0], UR, buff=0)
+        agent1_text = Text("\"Turn RIGHT\"", font_size=18, color=GREEN).next_to(agents[1], UL, buff=0)
         # self.add(agent0_text, agent1_text)
         
         leftline = DashedLine(start=agents[0].get_right(), end=notcircle.get_left(), color=PURPLE_E)
@@ -392,3 +403,49 @@ class DemoForICAB(PausableScene):
         """Scenario section."""
         t0 = Text("Scenario", font_size=32)
         self.play(Write(t0))
+        
+        
+        drones = VGroup(*[
+            SVGMobject("assets/images/drone.svg"),
+            SVGMobject("assets/images/drone.svg"),
+        ])
+        # Give all drones a grey outline to make them stand out.
+        for d in drones:
+            path_outline = d.family_members_with_points()[0]
+            path_outline.set_stroke(GRAY, 1)
+            d.scale(0.5)
+        
+        drones.next_to(t0, UP)
+        
+        drones[0].shift(LEFT*2)
+        drones[1].shift(RIGHT*2)
+        
+        self.play(GrowFromCenter(drones))
+        
+        line = Line(start=drones[0].get_right(), end=drones[1].get_left())
+        self.play(Write(line))
+        
+        
+        firetree = SVGMobject("assets/images/firetree.svg").scale(0.5)
+        firetree.next_to(drones[0], DOWN)
+        self.add(firetree)
+        
+        firehouse = SVGMobject("assets/images/firehouse.svg").scale(0.5)
+        firehouse.next_to(drones[1], DOWN)
+        self.add(firehouse)
+        
+        
+        self.play(Wiggle(drones[0]))
+        self.play(Wiggle(drones[1]))
+        self.play(Wiggle(firetree))
+        self.play(Wiggle(firehouse))
+        
+        # drone = SVGMobject("assets/images/drone.svg")
+        # drone.next_to(t0, DOWN*2)
+        # path_outline = drone.family_members_with_points()[0]
+        # path_outline.set_stroke(GRAY, 1)
+        
+        # self.play(FadeIn(drone))
+        
+        # self.play(drone.animate.shift(RIGHT*2))
+        # self.play(drone.animate.rotate(45*DEGREES))
