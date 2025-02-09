@@ -461,7 +461,7 @@ class DemoForICAB(PausableScene):
         ###
         # Scenario introduction.
         ###
-        self.next_section("scenario-intro", skip_animations=False) # TODO: delete.
+        self.next_section("scenario-intro", skip_animations=True) # TODO: delete.
         
         # group = Group(*[
         #     Group(*[
@@ -480,7 +480,7 @@ class DemoForICAB(PausableScene):
         #         Text("Firefighters on the ground have a limited localized view of the spreading flames", font_size=24),
         #     ]).arrange(),
         # ])
-        group = Group(*[
+        group_bullet = Group(*[
             # Fire.
             ImageMobject("assets/images/fire.png").scale(0.3),
             VGroup(*[
@@ -522,13 +522,11 @@ class DemoForICAB(PausableScene):
             ]).arrange(DOWN, aligned_edge=LEFT),
         ])
         # group.arrange(DOWN, aligned_edge=LEFT, buff=0.5)
-        group.arrange_in_grid(rows=len(group)//2, cols=2, col_alignments='rl', buff=0.5)
-        group.scale_to_fit_width(.9*config.frame_width)
-        group.to_edge(LEFT)
+        group_bullet.arrange_in_grid(rows=len(group_bullet)//2, cols=2, col_alignments='rl', buff=0.5)
+        group_bullet.scale_to_fit_width(.9*config.frame_width)
+        group_bullet.to_edge(LEFT)
         
-        Group(VGroup(Text("")))
-        
-        for (icon, textgroup) in itertools.batched(group, n=2):
+        for (icon, textgroup) in itertools.batched(group_bullet, n=2):
             self.play(FadeIn(icon))
             for t in textgroup:
                 self.play(Write(t)) # This works because we know that the items in this group are `VMobject`.
@@ -541,6 +539,99 @@ class DemoForICAB(PausableScene):
         # )
         # img_fire = ImageMobject("assets/images/fire.png")
         # # bullet_group_fire = 
+        
+        self.play(FadeOut(group_bullet))
+        
+        
+        ###
+        # Scenario diagram.
+        ###
+        self.next_section("scenario-diagram", skip_animations=True) # TODO: delete.
+        
+        
+        
+        # Satellite.
+        img_sat = ImageMobject("assets/images/satellite-2.png").rotate(-45*DEGREES)
+        self.play(GrowFromCenter(img_sat))
+        self.play(img_sat.animate.scale(0.25).next_to(section_title, DOWN, buff=-0.1))
+        #
+        text_sat = Text("Quantum Satellite", font_size=18).next_to(img_sat, RIGHT)
+        self.play(Write(text_sat))
+        
+        # Env left.
+        img_drone_left = ImageMobject("assets/images/quadcopter.png").scale(0.3).shift(LEFT*3).shift(UP*.5)
+        text_drone_left = Text("Quantum Drone A", font_size=18).next_to(img_drone_left, LEFT, buff=0.1)
+        img_rain_left = ImageMobject("assets/images/rain-drops.png").scale(0.25).next_to(img_drone_left, DOWN, buff=-0.2).rotate(30*DEGREES)
+        group_drone_left = Group(img_drone_left, img_rain_left, text_drone_left)
+        img_fire_house = ImageMobject("assets/images/wildfire-2.png").scale(0.3).next_to(img_drone_left, DOWN*7.5)
+        img_fireman_left = ImageMobject("assets/images/fireman.png").scale(0.15).next_to(img_fire_house, LEFT, aligned_edge=DOWN)
+        img_nocom_left = ImageMobject("assets/images/no-wifi.png").scale(0.15).next_to(img_fireman_left, UP)
+        img_nospeak_left = ImageMobject("assets/images/no-speak.png").scale(0.15).next_to(img_drone_left, RIGHT*7)
+        text_nospeak_left = Text("Blocked P2P", font_size=18).next_to(img_nospeak_left, UP, buff=0.1)
+        text_env_left = Text("House Fire", font_size=18).next_to(img_fire_house, DOWN)
+        self.play(GrowFromCenter(img_drone_left), FadeIn(img_rain_left), Write(text_drone_left))
+        self.add(img_fire_house, img_fireman_left, img_nocom_left, text_env_left, img_nospeak_left, text_nospeak_left)
+        group_env_left = Group(group_drone_left, img_fire_house, img_fireman_left, img_nocom_left, text_env_left, img_nospeak_left, text_nospeak_left)
+        
+        
+        # Env right.
+        img_drone_right = ImageMobject("assets/images/quadcopter.png").scale(0.3).shift(RIGHT*3).shift(UP*.5)
+        text_drone_right = Text("Quantum Drone B", font_size=18).next_to(img_drone_right, RIGHT, buff=0.1)
+        img_rain_right = ImageMobject("assets/images/rain-drops.png").scale(0.25).next_to(img_drone_right, DOWN, buff=-0.2).rotate(30*DEGREES)
+        group_drone_right = Group(img_drone_right, img_rain_right, text_drone_right)
+        img_fire_trees = ImageMobject("assets/images/wildfire.png").scale(0.3).next_to(img_drone_right, DOWN*7.5)
+        img_fireman_right = ImageMobject("assets/images/fireman.png").scale(0.15).next_to(img_fire_trees, RIGHT, aligned_edge=DOWN)
+        img_fireman_right.pixel_array = np.fliplr(img_fireman_right.pixel_array) # Horizontal flip, must do this because of bug in `.flip()`. See https://github.com/ManimCommunity/manim/issues/2412
+        img_nocom_right = ImageMobject("assets/images/no-wifi.png").scale(0.15).next_to(img_fireman_right, UP)
+        img_nospeak_right = ImageMobject("assets/images/no-speak.png").scale(0.15).next_to(img_drone_right, LEFT*7)
+        text_nospeak_right = Text("Blocked P2P", font_size=18).next_to(img_nospeak_right, UP, buff=0.1)
+        text_env_right = Text("Forest Fire", font_size=18).next_to(img_fire_trees, DOWN)
+        self.play(GrowFromCenter(img_drone_right), FadeIn(img_rain_right), Write(text_drone_right))
+        self.add(img_fire_trees, img_fireman_right, img_nocom_right, text_env_right, img_nospeak_right, text_nospeak_right)
+        group_env_right = Group(group_drone_right, img_fire_trees, img_fireman_right, img_nocom_right, text_env_right, img_nospeak_right, text_nospeak_right)
+        
+        
+        group_env_left.shift(LEFT)
+        group_env_right.shift(RIGHT)
+        
+        group_envs = Group(group_env_left, group_env_right)
+        
+        
+        # Connect arrows.
+        # arrow_sat_to_drone_left = DashedVMobject(Arrow(start=img_sat.get_bottom(), end=img_drone_left.get_corner(UR+DOWN), max_tip_length_to_length_ratio=0.1))
+        arrow_sat_to_drone_left = DashedVMobject(Arrow(start=img_sat.get_bottom(), end=img_drone_left.get_corner(UR), max_tip_length_to_length_ratio=0.1, color=PURPLE))
+        arrow_sat_to_drone_right = DashedVMobject(Arrow(start=img_sat.get_bottom(), end=img_drone_right.get_corner(UL), max_tip_length_to_length_ratio=0.1, color=PURPLE))
+        # self.play(Write(arrow_sat_to_drone_left), Write(arrow_sat_to_drone_right))
+        
+        # Put a qubit at the center of each arrow.
+        qubit_left = Qubit(circle_color=PURPLE, ellipse_color=PURPLE).scale(0.25).move_to(arrow_sat_to_drone_left.get_center(), DOWN).shift(UP*.3)
+        qubit_right = Qubit(circle_color=PURPLE, ellipse_color=PURPLE).scale(0.25).move_to(arrow_sat_to_drone_right.get_center(), DOWN).shift(UP*.3)
+        # self.add(qubit_left, qubit_right)
+        
+        # Animate both arrows coming from the satellite.
+        self.play(Write(arrow_sat_to_drone_left), Write(qubit_left), Write(arrow_sat_to_drone_right), Write(qubit_right))
+        
+        # Animate no-speak arrows.
+        arrow_drone_left_to_nospeak_left = Arrow(start=img_drone_left.get_right(), end=img_nospeak_left.get_left(), max_tip_length_to_length_ratio=0.5, color=RED)
+        arrow_drone_left_to_nospeak_right = Arrow(start=img_drone_right.get_left(), end=img_nospeak_right.get_right(), max_tip_length_to_length_ratio=0.5, color=RED)
+        self.play(Write(arrow_drone_left_to_nospeak_left), Write(arrow_drone_left_to_nospeak_right))
+    
+        
+        # self.add(img_fire_trees, img_fire_house, img_fireman_left, img_fireman_right, img_nocom_left, img_nocom_right)
+        # group_envs = Group(img_fire_trees, img_fire_house, img_fireman_left, img_fireman_right, img_nocom_left, img_nocom_right)
+        
+        # Center obstruction.
+        img_obstruction = ImageMobject("assets/images/mountain-3.png").scale(1.1)
+        text_obstruction = Text("Environmental Obstruction", font_size=18).next_to(img_obstruction, DOWN)
+        group_obstruction = Group(img_obstruction, text_obstruction)
+        group_obstruction.align_to(group_envs.get_bottom(), DOWN)
+        
+        self.add(group_obstruction)
+        
+        
+        
+        
+
         
         
         return
