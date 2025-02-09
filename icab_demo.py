@@ -546,17 +546,17 @@ class DemoForICAB(PausableScene):
         ###
         # Scenario diagram.
         ###
-        self.next_section("scenario-diagram", skip_animations=True) # TODO: delete.
+        self.next_section("scenario-diagram", skip_animations=False) # TODO: delete.
         
         
         
-        # Satellite.
-        img_sat = ImageMobject("assets/images/satellite-2.png").rotate(-45*DEGREES)
-        self.play(GrowFromCenter(img_sat))
-        self.play(img_sat.animate.scale(0.25).next_to(section_title, DOWN, buff=-0.1))
-        #
-        text_sat = Text("Quantum Satellite", font_size=18).next_to(img_sat, RIGHT)
-        self.play(Write(text_sat))
+        # # Satellite.
+        # img_sat = ImageMobject("assets/images/satellite-2.png").rotate(-45*DEGREES)
+        # self.play(GrowFromCenter(img_sat))
+        # self.play(img_sat.animate.scale(0.25).next_to(section_title, DOWN, buff=-0.1))
+        # #
+        # text_sat = Text("Quantum Satellite", font_size=18).next_to(img_sat, UR, buff=-0.4)
+        # self.play(Write(text_sat))
         
         # Env left.
         img_drone_left = ImageMobject("assets/images/quadcopter.png").scale(0.3).shift(LEFT*3).shift(UP*.5)
@@ -566,13 +566,25 @@ class DemoForICAB(PausableScene):
         img_fire_house = ImageMobject("assets/images/wildfire-2.png").scale(0.3).next_to(img_drone_left, DOWN*7.5)
         img_fireman_left = ImageMobject("assets/images/fireman.png").scale(0.15).next_to(img_fire_house, LEFT, aligned_edge=DOWN)
         img_nocom_left = ImageMobject("assets/images/no-wifi.png").scale(0.15).next_to(img_fireman_left, UP)
+        text_nocom_left = Text("No Wireless", font_size=18).next_to(img_nocom_left, UP, buff=0.1)
         img_nospeak_left = ImageMobject("assets/images/no-speak.png").scale(0.15).next_to(img_drone_left, RIGHT*7)
         text_nospeak_left = Text("Blocked P2P", font_size=18).next_to(img_nospeak_left, UP, buff=0.1)
         text_env_left = Text("House Fire", font_size=18).next_to(img_fire_house, DOWN)
-        self.play(GrowFromCenter(img_drone_left), FadeIn(img_rain_left), Write(text_drone_left))
-        self.add(img_fire_house, img_fireman_left, img_nocom_left, text_env_left, img_nospeak_left, text_nospeak_left)
-        group_env_left = Group(group_drone_left, img_fire_house, img_fireman_left, img_nocom_left, text_env_left, img_nospeak_left, text_nospeak_left)
-        
+        # self.play(GrowFromCenter(img_drone_left), FadeIn(img_rain_left), Write(text_drone_left))
+        # self.add(img_fire_house, img_fireman_left, img_nocom_left, text_env_left, img_nospeak_left, text_nospeak_left)
+        group_env_left = Group(group_drone_left, img_fire_house, img_fireman_left, img_nocom_left, text_nocom_left, text_env_left, img_nospeak_left, text_nospeak_left)
+        group_env_left.shift(LEFT)
+        self.play(
+            FadeIn(img_fire_house),
+            Write(text_env_left),
+            FadeIn(img_fireman_left),
+            # FadeIn(img_nocom_left),
+        )
+        self.play(
+            GrowFromCenter(img_drone_left),
+            # GrowFromCenter(img_rain_left),
+            Write(text_drone_left),
+        )
         
         # Env right.
         img_drone_right = ImageMobject("assets/images/quadcopter.png").scale(0.3).shift(RIGHT*3).shift(UP*.5)
@@ -583,50 +595,281 @@ class DemoForICAB(PausableScene):
         img_fireman_right = ImageMobject("assets/images/fireman.png").scale(0.15).next_to(img_fire_trees, RIGHT, aligned_edge=DOWN)
         img_fireman_right.pixel_array = np.fliplr(img_fireman_right.pixel_array) # Horizontal flip, must do this because of bug in `.flip()`. See https://github.com/ManimCommunity/manim/issues/2412
         img_nocom_right = ImageMobject("assets/images/no-wifi.png").scale(0.15).next_to(img_fireman_right, UP)
+        text_nocom_right = Text("No Wireless", font_size=18).next_to(img_nocom_right, UP, buff=0.1)
         img_nospeak_right = ImageMobject("assets/images/no-speak.png").scale(0.15).next_to(img_drone_right, LEFT*7)
         text_nospeak_right = Text("Blocked P2P", font_size=18).next_to(img_nospeak_right, UP, buff=0.1)
         text_env_right = Text("Forest Fire", font_size=18).next_to(img_fire_trees, DOWN)
-        self.play(GrowFromCenter(img_drone_right), FadeIn(img_rain_right), Write(text_drone_right))
-        self.add(img_fire_trees, img_fireman_right, img_nocom_right, text_env_right, img_nospeak_right, text_nospeak_right)
-        group_env_right = Group(group_drone_right, img_fire_trees, img_fireman_right, img_nocom_right, text_env_right, img_nospeak_right, text_nospeak_right)
-        
-        
-        group_env_left.shift(LEFT)
+        # self.play(GrowFromCenter(img_drone_right), FadeIn(img_rain_right), Write(text_drone_right))
+        # self.add(img_fire_trees, img_fireman_right, img_nocom_right, text_env_right, img_nospeak_right, text_nospeak_right)
+        group_env_right = Group(group_drone_right, img_fire_trees, img_fireman_right, img_nocom_right, text_nocom_right, text_env_right, img_nospeak_right, text_nospeak_right)
         group_env_right.shift(RIGHT)
+        self.play(
+            FadeIn(img_fire_trees),
+            Write(text_env_right),
+            FadeIn(img_fireman_right),
+            # FadeIn(img_nocom_right),
+        )
+        self.play(
+            GrowFromCenter(img_drone_right),
+            # GrowFromCenter(img_rain_right),
+            Write(text_drone_right),
+        )
         
+        # Combine both left/right environments into one group to make alignment of future objects easier.
         group_envs = Group(group_env_left, group_env_right)
-        
-        
-        # Connect arrows.
-        # arrow_sat_to_drone_left = DashedVMobject(Arrow(start=img_sat.get_bottom(), end=img_drone_left.get_corner(UR+DOWN), max_tip_length_to_length_ratio=0.1))
-        arrow_sat_to_drone_left = DashedVMobject(Arrow(start=img_sat.get_bottom(), end=img_drone_left.get_corner(UR), max_tip_length_to_length_ratio=0.1, color=PURPLE))
-        arrow_sat_to_drone_right = DashedVMobject(Arrow(start=img_sat.get_bottom(), end=img_drone_right.get_corner(UL), max_tip_length_to_length_ratio=0.1, color=PURPLE))
-        # self.play(Write(arrow_sat_to_drone_left), Write(arrow_sat_to_drone_right))
-        
-        # Put a qubit at the center of each arrow.
-        qubit_left = Qubit(circle_color=PURPLE, ellipse_color=PURPLE).scale(0.25).move_to(arrow_sat_to_drone_left.get_center(), DOWN).shift(UP*.3)
-        qubit_right = Qubit(circle_color=PURPLE, ellipse_color=PURPLE).scale(0.25).move_to(arrow_sat_to_drone_right.get_center(), DOWN).shift(UP*.3)
-        # self.add(qubit_left, qubit_right)
-        
-        # Animate both arrows coming from the satellite.
-        self.play(Write(arrow_sat_to_drone_left), Write(qubit_left), Write(arrow_sat_to_drone_right), Write(qubit_right))
-        
-        # Animate no-speak arrows.
-        arrow_drone_left_to_nospeak_left = Arrow(start=img_drone_left.get_right(), end=img_nospeak_left.get_left(), max_tip_length_to_length_ratio=0.5, color=RED)
-        arrow_drone_left_to_nospeak_right = Arrow(start=img_drone_right.get_left(), end=img_nospeak_right.get_right(), max_tip_length_to_length_ratio=0.5, color=RED)
-        self.play(Write(arrow_drone_left_to_nospeak_left), Write(arrow_drone_left_to_nospeak_right))
-    
-        
-        # self.add(img_fire_trees, img_fire_house, img_fireman_left, img_fireman_right, img_nocom_left, img_nocom_right)
-        # group_envs = Group(img_fire_trees, img_fire_house, img_fireman_left, img_fireman_right, img_nocom_left, img_nocom_right)
         
         # Center obstruction.
         img_obstruction = ImageMobject("assets/images/mountain-3.png").scale(1.1)
         text_obstruction = Text("Environmental Obstruction", font_size=18).next_to(img_obstruction, DOWN)
         group_obstruction = Group(img_obstruction, text_obstruction)
         group_obstruction.align_to(group_envs.get_bottom(), DOWN)
+        self.play(FadeIn(img_obstruction), Write(text_obstruction))
         
-        self.add(group_obstruction)
+        
+        # Animate no-speak arrows.
+        arrow_drone_left_to_nospeak_left = Arrow(start=img_drone_left.get_right(), end=img_nospeak_left.get_left(), max_tip_length_to_length_ratio=0.5, color=RED)
+        arrow_drone_left_to_nospeak_right = Arrow(start=img_drone_right.get_left(), end=img_nospeak_right.get_right(), max_tip_length_to_length_ratio=0.5, color=RED)
+        self.play(Write(arrow_drone_left_to_nospeak_left), Write(arrow_drone_left_to_nospeak_right))
+        self.play(FadeIn(img_nospeak_left), Write(text_nospeak_left), FadeIn(img_nospeak_right), Write(text_nospeak_right))
+    
+        # Animate no communication bubbles for fireman.
+        self.play(GrowFromCenter(img_nocom_left), Write(text_nocom_left), GrowFromCenter(img_nocom_right), Write(text_nocom_right))
+        
+        # Wiggle the no-com and no-speak bubbles.
+        self.play(Wiggle(img_nocom_left), Wiggle(img_nocom_right), Wiggle(img_nospeak_left), Wiggle(img_nospeak_right))
+        self.play(Wiggle(img_nocom_left), Wiggle(img_nocom_right), Wiggle(img_nospeak_left), Wiggle(img_nospeak_right))
+        
+        img_nospeak_left_newloc = img_nospeak_left.copy().next_to(img_drone_left, UP, buff=0.1)
+        img_nospeak_right_newloc = img_nospeak_right.copy().next_to(img_drone_right, UP, buff=0.1)
+        
+        # Get rid of the no-com arrows and symbols to make entanglement easier to visualize.
+        self.play(
+            img_obstruction.animate.scale(0.5).next_to(text_obstruction, UP, buff=0.1),
+            # FadeOut(img_nospeak_left),
+            ReplacementTransform(img_nospeak_left, img_nospeak_left_newloc),
+            # FadeOut(text_nospeak_left),
+            text_nospeak_left.animate.next_to(img_nospeak_left_newloc, UP, buff=0.1),
+            FadeOut(arrow_drone_left_to_nospeak_left),
+            # FadeOut(img_nospeak_right),
+            ReplacementTransform(img_nospeak_right, img_nospeak_right_newloc),
+            # FadeOut(text_nospeak_right),
+            text_nospeak_right.animate.next_to(img_nospeak_right_newloc, UP, buff=0.1),
+            FadeOut(arrow_drone_left_to_nospeak_right),
+        )
+        # Update the old references after animating the position change.
+        img_nospeak_left_newloc = img_nospeak_left
+        img_nospeak_right_newloc = img_nospeak_right
+    
+        
+        # self.add(img_fire_trees, img_fire_house, img_fireman_left, img_fireman_right, img_nocom_left, img_nocom_right)
+        # group_envs = Group(img_fire_trees, img_fire_house, img_fireman_left, img_fireman_right, img_nocom_left, img_nocom_right)
+        
+        
+        # Satellite.
+        img_sat = ImageMobject("assets/images/satellite-2.png").rotate(-45*DEGREES).scale(0.25).next_to(section_title, DOWN, buff=-0.1)
+        self.play(GrowFromCenter(img_sat))
+        # self.play(GrowFromCenter(img_sat))
+        # self.play(img_sat.animate.scale(0.25).next_to(section_title, DOWN, buff=-0.1))
+        #
+        text_sat = Text("Quantum Satellite", font_size=18).next_to(img_sat, UR, buff=-0.4)
+        self.play(Write(text_sat))
+        
+        # # Put a qubit at the center of each arrow.
+        # qubit_left = Qubit(circle_color=PURPLE, ellipse_color=PURPLE).scale(0.25).move_to(arrow_sat_to_drone_left.get_center(), UP).shift(DOWN*.3)
+        # qubit_right = Qubit(circle_color=PURPLE, ellipse_color=PURPLE).scale(0.25).move_to(arrow_sat_to_drone_right.get_center(), UP).shift(DOWN*.3)
+        qubit_left = Qubit(circle_color=PURPLE, ellipse_color=PURPLE).scale(0.3)
+        qubit_right = Qubit(circle_color=PURPLE, ellipse_color=PURPLE).scale(0.3)
+        qubit_left.next_to(img_sat, DOWN).shift(LEFT*.5)
+        qubit_right.next_to(img_sat, DOWN).shift(RIGHT*.5)
+        group_qubits = VGroup(qubit_left, qubit_right)
+        
+        # Create a wave between the qubits to symbolize entanglement.
+        wave_entgen = Line(start=qubit_left.get_right(), end=qubit_right.get_left())
+        
+        tmptext = Text("Entanglement Generation", font_size=18)
+        tmptext.next_to(group_qubits, DOWN)
+        
+        self.play(Write(tmptext), FadeIn(group_qubits))
+        self.play(Write(wave_entgen)) # Show wave.
+        self.play(Unwrite(wave_entgen), Unwrite(tmptext)) # Remove wave.
+        
+        
+        tmptext = Paragraph("Distribute Qubits\nvia\nQuantum Channel", alignment='center', font_size=18) # Reuse the text variable since we'll need a lot of them :).
+        tmptext.next_to(img_sat, DOWN*1.5)
+        
+        # Move the qubits.
+        qubit_left_newloc = qubit_left.copy().next_to(img_drone_left, RIGHT, buff=0.2)
+        qubit_right_newloc = qubit_right.copy().next_to(img_drone_right, LEFT, buff=0.2)
+        
+        # Connect arrows from satellite to qubits.
+        arrow_sat_to_drone_left = DashedVMobject(Arrow(start=img_sat.get_corner(DL)+UR*.5, end=qubit_left_newloc.get_corner(UR), max_tip_length_to_length_ratio=0.1, color=PURPLE))
+        arrow_sat_to_drone_right = DashedVMobject(Arrow(start=img_sat.get_corner(DR)+UL*.5, end=qubit_right_newloc.get_corner(UL), max_tip_length_to_length_ratio=0.1, color=PURPLE))
+        
+        # Move the qubits next to the drones.
+        self.play(
+            Write(tmptext),
+            ReplacementTransform(qubit_left, qubit_left_newloc),
+            ReplacementTransform(qubit_right, qubit_right_newloc),
+            Write(arrow_sat_to_drone_left),
+            Write(arrow_sat_to_drone_right),
+        )
+        # Update qubit references.
+        qubit_left = qubit_left_newloc
+        qubit_right = qubit_right_newloc
+        
+        # Remove the temporary text and arrows from the satellite.
+        self.play(
+            FadeOut(tmptext),
+            FadeOut(arrow_sat_to_drone_left),
+            FadeOut(arrow_sat_to_drone_right),
+        )
+        
+        
+        
+        # TODO show that observations on the LEFT side affect the actions on the right side.
+        
+        # TODO entangled wave between qubits.
+        qubit_scale = 0.5
+        wave_height_scale = qubit_scale - 0.15
+        qubit_gap_width = abs(qubit_left.get_x(RIGHT) - qubit_right.get_x(LEFT))
+        alpha = ValueTracker(0)
+        waves = VGroup(*[
+            always_redraw(
+                lambda: FunctionGraph(
+                    lambda x: wave_height_scale*np.sin(2*PI*x - alpha.get_value()),
+                    x_range=[-1, 1],
+                    color=GRAY_C,
+                ).stretch_to_fit_width(qubit_gap_width).next_to(qubit_left, RIGHT, buff=0)
+            ),
+            always_redraw(
+                lambda: FunctionGraph(
+                    lambda x: wave_height_scale*np.sin(2*PI*x + alpha.get_value() + PI),
+                    x_range=[-1, 1],
+                    color=GRAY_D,
+                ).stretch_to_fit_width(qubit_gap_width).next_to(qubit_left, RIGHT, buff=0)
+            ),
+        ])
+        
+        
+        # Arrow going down to environment.
+        tmparrow_down = DashedVMobject(Arrow(start=img_drone_left.get_bottom(), end=img_fire_house.get_top(), max_tip_length_to_length_ratio=0.15))
+        # Arrow going back up to drone.
+        tmparrow_up = DashedVMobject(Arrow(start=img_fire_house.get_top(), end=img_drone_left.get_bottom(), max_tip_length_to_length_ratio=0.15))
+        # tmptext_left = Paragraph("Local observations\non the LEFT", font_size=18).next_to(tmparrow_down, RIGHT) # Text to the right of the arrow.
+        tmptext_left = Paragraph("Local observations\non the LEFT", font_size=18).next_to(midpoint(img_drone_left.get_bottom(), img_fire_house.get_top()), RIGHT) # Text to the right of the arrow.
+        self.play(Write(tmptext_left))
+        self.play(Write(tmparrow_down), Wiggle(img_drone_left))
+        self.play(FadeOut(tmparrow_down))
+        self.play(Write(tmparrow_up), Wiggle(img_fire_house))
+        # self.play(FadeOut(tmparrow_up))
+        
+        tmptext_center = Paragraph("Through Quantum Entanglement", font_size=18).next_to(waves, DOWN)
+        self.play(
+            Write(tmptext_center),
+            Create(waves),
+        )
+        self.play(
+            alpha.animate.set_value(2*PI),
+            qubit_left.animate.set_state_angle(-45*DEGREES),
+            qubit_right.animate.set_state_angle(-45*DEGREES),
+        )
+        self.play(
+            alpha.animate.set_value(0),
+            qubit_left.animate.set_state_angle(45*DEGREES),
+            qubit_right.animate.set_state_angle(45*DEGREES),
+        )
+        
+
+        tmptext_right = Paragraph("Effect the actions\non the RIGHT", font_size=18, alignment='right').next_to(midpoint(img_drone_right.get_bottom(), img_fire_trees.get_top()), LEFT)
+        self.play(Write(tmptext_right))
+        # self.play(alpha.animate.set_value(2*PI))
+        # self.play(alpha.animate.set_value(0))
+        
+        
+        
+        
+        
+        
+        
+        # # Animate the qubits changing state.
+        # action_drone_left = Text("Turn LEFT", font_size=16, color=GREEN).next_to(text_drone_left, DOWN)
+        # action_drone_right = Text("Turn RIGHT", font_size=16, color=GREEN).next_to(text_drone_right, DOWN)
+        
+        # Get original rain position and opacity.
+        orig_rain_pos = [
+            img_rain_left.get_center(),
+            img_rain_right.get_center(),
+        ]
+        
+        # self.play(
+        #     qubit_left.animate.set_state_angle(-45*DEGREES),
+        #     qubit_right.animate.set_state_angle(-45*DEGREES),
+        #     Write(action_drone_left),
+        #     img_rain_left.animate.move_to(img_fire_house.get_center()).set_opacity(0),
+        # )
+        
+        # img_rain_left.move_to(orig_rain_pos[0]).set_opacity(1) # Restore state before animation.
+        # self.play(img_rain_left.animate.move_to(img_fire_house.get_center()).set_opacity(0)) # Animate the rain drop again.
+        
+        # self.play(qubit_left.animate.set_state_angle(225*DEGREES), qubit_right.animate.set_state_angle(225*DEGREES))
+        
+        
+        self.play(
+            qubit_left.animate.set_state_angle(-45*DEGREES),
+            qubit_right.animate.set_state_angle(-45*DEGREES),
+            # Write(action_drone_right),
+            img_rain_right.animate.move_to(img_fire_trees.get_center()).set_opacity(0),
+        )
+        
+        img_rain_right.move_to(orig_rain_pos[1]).set_opacity(1) # Restore state before animation.
+        
+        # self.play(img_rain_right.animate.move_to(img_fire_trees.get_center()).set_opacity(0)) # Animate the rain drop again.
+        
+        # # img_rain_right.move_to(orig_rain_pos[1]).set_opacity(1) # Restore state before animation.
+        
+        # self.play(qubit_left.animate.set_state_angle(225*DEGREES), qubit_right.animate.set_state_angle(225*DEGREES))
+        
+        
+        
+        
+        
+        # # Now play it all again for sync.
+        # self.play(
+        #     Wiggle(img_fire_house),
+        #     AnimationGroup(Write(tmparrow_up), FadeOut(tmparrow_up), lag_ratio=1),
+        # )
+        # self.play(
+        #     # Wiggle(img_fire_house),
+        #     # AnimationGroup(Write(tmparrow_up), FadeOut(tmparrow_up), lag_ratio=1),
+        #     qubit_left.animate.set_state_angle(45*DEGREES),
+        #     qubit_right.animate.set_state_angle(45*DEGREES),
+        #     alpha.animate.set_value(2*PI),
+        #     img_rain_right.animate.move_to(img_fire_trees.get_center()).set_opacity(0),
+        # )
+        # img_rain_right.move_to(orig_rain_pos[1]).set_opacity(1) # Restore state before animation.
+        # self.play(
+        #     Wiggle(img_fire_house),
+        #     AnimationGroup(Write(tmparrow_up), FadeOut(tmparrow_up), lag_ratio=1),
+        #     qubit_left.animate.set_state_angle(-45*DEGREES),
+        #     qubit_right.animate.set_state_angle(-45*DEGREES),
+        #     alpha.animate.set_value(0),
+        #     img_rain_right.animate.move_to(img_fire_trees.get_center()).set_opacity(0),
+        # )
+        
+        self.play(
+            Write(tmparrow_up),
+            Wiggle(img_fire_house),
+            alpha.animate.set_value(2*PI),
+            img_rain_right.animate.move_to(img_fire_trees.get_center()).set_opacity(0),
+        )
+        img_rain_right.move_to(orig_rain_pos[1]).set_opacity(1) # Restore state before animation.
+        alpha.set_value(0) # Reset alpha.
+        self.play(
+            Write(tmparrow_up),
+            Wiggle(img_fire_house),
+            alpha.animate.set_value(2*PI),
+            img_rain_right.animate.move_to(img_fire_trees.get_center()).set_opacity(0),
+        )
         
         
         
