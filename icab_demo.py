@@ -1,3 +1,4 @@
+import itertools
 import os
 import tempfile
 from typing import Callable
@@ -11,6 +12,15 @@ import segno
 # Tool for creating voiceovers with Manim: https://www.manim.community/plugin/manim-voiceover/
 
 # Example of making a neural network with Manim: https://medium.com/@andresberejnoi/using-manim-and-python-to-create-animations-like-3blue1brown-andres-berejnoi-34f755606761
+
+def batched(iterable, n: int):
+    """Converts a list into a list of tuples of every `n` elements.
+    
+    For n=2, the function will produce:
+    x -> [(x0, x1), (x2, x3), ...]
+    """
+    x = iter(iterable)
+    return zip(*([x]*n))
 
 
 class SegnoQRCodeImageMobject(ImageMobject):
@@ -119,10 +129,10 @@ class DemoForICAB(PausableScene):
         # Each section should cleanup any objects after itself if they are not to be used again.
         # Sections can be tested individually, to do this set `skip_animations=True` to turn off all other sections not used (note that the section will still be generated, allowing objects to move to their final position for use with future sections in the pipeline).
         sections: list[tuple[Callable, dict]] = [
-            (self.section_title, dict(name="Title", skip_animations=False)),
-            (self.section_motivation, dict(name="Motivation", skip_animations=False)),
-            # (self.section_scenario, dict(name="Scenario", skip_animations=True)),
-            (self.section_outro, dict(name="Outro", skip_animations=False)),
+            (self.section_title, dict(name="Title", skip_animations=True)),
+            (self.section_motivation, dict(name="Motivation", skip_animations=True)),
+            (self.section_scenario, dict(name="Scenario", skip_animations=False)),
+            # (self.section_outro, dict(name="Outro", skip_animations=True)), # Play last.
             (self.section_placeholder, dict(name="Placeholder", skip_animations=False)),
         ]
         for method, section_kwargs in sections:
@@ -439,54 +449,184 @@ class DemoForICAB(PausableScene):
     
     def section_scenario(self):
         """Scenario section."""
-        t0 = Text("Scenario", font_size=32)
-        self.play(Write(t0))
         
+        self.next_section("scenario-start", skip_animations=True) # TODO: delete.
         
-        drones = VGroup(*[
-            SVGMobject("assets/images/drone.svg"),
-            SVGMobject("assets/images/drone.svg"),
+        # Create and animate the title.
+        section_title = Text("Example Scenario", font_size=self.eqmarl_acronym.font_size) # Match font size of the acronym in the top-left.
+        self.play(Write(section_title)) # At origin.
+        self.play(section_title.animate.to_edge(UP)) # Move to top edge.
+        self.small_pause()
+        
+        ###
+        # Scenario introduction.
+        ###
+        self.next_section("scenario-intro", skip_animations=False) # TODO: delete.
+        
+        # group = Group(*[
+        #     Group(*[
+        #         ImageMobject("assets/images/fire.png").scale(0.3),
+        #         Group(*[
+        #             Text(
+        #                 text="The wildfires in California have spread at an unprecedented rate",
+        #                 t2c={'wildfires': RED},
+        #                 font_size=24,
+        #             ),
+        #             Text("Rapidly and efficiently extinguishing these fires has arisen to be a major challenge", font_size=18),
+        #         ]).arrange(DOWN, aligned_edge=LEFT),
+        #     ]).arrange(),
+        #     Group(*[
+        #         ImageMobject("assets/images/fireman.png").scale(0.25),
+        #         Text("Firefighters on the ground have a limited localized view of the spreading flames", font_size=24),
+        #     ]).arrange(),
+        # ])
+        group = Group(*[
+            # Fire.
+            ImageMobject("assets/images/fire.png").scale(0.3),
+            VGroup(*[
+                Text(
+                    text="The wildfires in California have spread at an unprecedented rate",
+                    t2c={'wildfires': RED},
+                    font_size=24,
+                ),
+                Text("Rapidly and efficiently extinguishing these fires has arisen to be a major challenge", font_size=18),
+            ]).arrange(DOWN, aligned_edge=LEFT),
+            
+            # Firefighter.
+            ImageMobject("assets/images/fireman.png").scale(0.25),
+            VGroup(*[
+                Text("Firefighters on the ground have a limited localized view of the dynamic environment", font_size=24, t2w={'limited localized view':BOLD, 'dynamic environment':BOLD}),
+                Text("Environmental features and limited wireless connectivity obstruct long-range communication", font_size=18),
+            ]).arrange(DOWN, aligned_edge=LEFT),
+            
+            # Drone.
+            ImageMobject("assets/images/no-wifi.png").scale(0.25),
+            VGroup(*[
+                Text("Swarming drones could collaboratively learn an optimal extinguish strategy, with caveats:", font_size=24, t2w={'Swarming drones':BOLD}),
+                Text("Obstructions and limited wireless infrastructure hinders communication", font_size=18),
+                Text("Aerial observations are comprised of many large data points (e.g., visual acoustic, geospatial, environmental, etc.)", font_size=18),
+            ]).arrange(DOWN, aligned_edge=LEFT),
+            
+            # Qubit.
+            Qubit(circle_color=PURPLE, ellipse_color=PURPLE).scale(0.45),
+            VGroup(*[
+                Text("Quantum entanglement is not limited by distance or obstructions", font_size=24, t2c={'Quantum entanglement':PURPLE_A}),
+                Text("Couples the behavior of two entangled entities despite their physical separation", font_size=18),
+            ]).arrange(DOWN, aligned_edge=LEFT),
+            
+            # Swarming Drones.
+            ImageMobject("assets/images/quadcopter.png").scale(0.3),
+            VGroup(*[
+                Text("Quantum entangled drones could collaborate without direct P2P links, regardless of environmental conditions", font_size=24, t2c={'Quantum entangled drones':BLUE}),
+                Text("Entangled means something that affects one will also affect another", font_size=18),
+            ]).arrange(DOWN, aligned_edge=LEFT),
         ])
-        # Give all drones a grey outline to make them stand out.
-        for d in drones:
-            path_outline = d.family_members_with_points()[0]
-            path_outline.set_stroke(GRAY, 1)
-            d.scale(0.5)
+        # group.arrange(DOWN, aligned_edge=LEFT, buff=0.5)
+        group.arrange_in_grid(rows=len(group)//2, cols=2, col_alignments='rl', buff=0.5)
+        group.scale_to_fit_width(.9*config.frame_width)
+        group.to_edge(LEFT)
         
-        drones.next_to(t0, UP)
+        Group(VGroup(Text("")))
         
-        drones[0].shift(LEFT*2)
-        drones[1].shift(RIGHT*2)
-        
-        self.play(GrowFromCenter(drones))
-        
-        line = Line(start=drones[0].get_right(), end=drones[1].get_left())
-        self.play(Write(line))
+        for (icon, textgroup) in itertools.batched(group, n=2):
+            self.play(FadeIn(icon))
+            for t in textgroup:
+                self.play(Write(t)) # This works because we know that the items in this group are `VMobject`.
+                self.small_pause()
         
         
-        firetree = SVGMobject("assets/images/firetree.svg").scale(0.5)
-        firetree.next_to(drones[0], DOWN)
-        self.add(firetree)
+        # t0 = Text(
+        #     text="The wildfires in California have spread at an unprecedented rate",
+        #     t2c={'wildfires': RED}
+        # )
+        # img_fire = ImageMobject("assets/images/fire.png")
+        # # bullet_group_fire = 
         
-        firehouse = SVGMobject("assets/images/firehouse.svg").scale(0.5)
-        firehouse.next_to(drones[1], DOWN)
-        self.add(firehouse)
+        
+        return
         
         
-        self.play(Wiggle(drones[0]))
-        self.play(Wiggle(drones[1]))
-        self.play(Wiggle(firetree))
-        self.play(Wiggle(firehouse))
+        t0 = Text(
+            text="The wildfires in California have spread at an unprecedented rate",
+            t2c={'wildfires': RED}
+        )
+        t0.scale_to_fit_width(.9*config.frame_width)
+        print(f"{t0.font_size=}")
+        self.play(Write(t0))
+        self.wait()
         
-        # drone = SVGMobject("assets/images/drone.svg")
-        # drone.next_to(t0, DOWN*2)
-        # path_outline = drone.family_members_with_points()[0]
-        # path_outline.set_stroke(GRAY, 1)
+        t1 = Text("Rapidly and efficiently extinguishing these fires has arisen to be a major challenge")
+        t1.scale_to_fit_width(.8*config.frame_width)
+        t1.next_to(t0, DOWN)
+        self.play(Write(t1))
         
-        # self.play(FadeIn(drone))
+        # Group text boxes and move them both up as a unit.
+        g0 = VGroup(t0, t1)
+        self.play(g0.animate.shift(UP*2))
         
-        # self.play(drone.animate.shift(RIGHT*2))
-        # self.play(drone.animate.rotate(45*DEGREES))
+        t2 = Text("Firefighters on the ground have a limited localized view of the spreading flames")
+        t2.scale_to_fit_width(.9*config.frame_width)
+        self.play(Write(t2))
+        
+        img_fire = ImageMobject("assets/images/fire.png")
+        self.add(img_fire)
+        
+        img_fireman = ImageMobject("assets/images/fireman.png")
+        self.add(img_fireman)
+        
+        img_drone = ImageMobject("assets/images/drone.png")
+        self.add(img_drone)
+        
+        ########
+        
+        # t0 = Text("Scenario", font_size=32)
+        # self.play(Write(t0))
+        
+        
+        # drones = VGroup(*[
+        #     SVGMobject("assets/images/drone.svg"),
+        #     SVGMobject("assets/images/drone.svg"),
+        # ])
+        # # Give all drones a grey outline to make them stand out.
+        # for d in drones:
+        #     path_outline = d.family_members_with_points()[0]
+        #     path_outline.set_stroke(GRAY, 1)
+        #     d.scale(0.5)
+        
+        # drones.next_to(t0, UP)
+        
+        # drones[0].shift(LEFT*2)
+        # drones[1].shift(RIGHT*2)
+        
+        # self.play(GrowFromCenter(drones))
+        
+        # line = Line(start=drones[0].get_right(), end=drones[1].get_left())
+        # self.play(Write(line))
+        
+        
+        # firetree = SVGMobject("assets/images/firetree.svg").scale(0.5)
+        # firetree.next_to(drones[0], DOWN)
+        # self.add(firetree)
+        
+        # firehouse = SVGMobject("assets/images/firehouse.svg").scale(0.5)
+        # firehouse.next_to(drones[1], DOWN)
+        # self.add(firehouse)
+        
+        
+        # self.play(Wiggle(drones[0]))
+        # self.play(Wiggle(drones[1]))
+        # self.play(Wiggle(firetree))
+        # self.play(Wiggle(firehouse))
+        
+        # # drone = SVGMobject("assets/images/drone.svg")
+        # # drone.next_to(t0, DOWN*2)
+        # # path_outline = drone.family_members_with_points()[0]
+        # # path_outline.set_stroke(GRAY, 1)
+        
+        # # self.play(FadeIn(drone))
+        
+        # # self.play(drone.animate.shift(RIGHT*2))
+        # # self.play(drone.animate.rotate(45*DEGREES))
     
     def section_outro(self):
         
