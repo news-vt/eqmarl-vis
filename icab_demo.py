@@ -17,6 +17,19 @@ import segno
 
 # Example of making a neural network with Manim: https://medium.com/@andresberejnoi/using-manim-and-python-to-create-animations-like-3blue1brown-andres-berejnoi-34f755606761
 
+def load_train_results(filepath: str | Path) -> tuple[list, dict[str, Any]]:
+    """Loads training results from JSON file."""
+    with open(str(filepath), 'r') as f:
+        d = json.load(f)
+    return d['reward'], d['metrics']
+
+def remove_nan(x: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Remove all indices of NaN values detected in `y` from both `x` and `y`."""
+    valid_idx = ~np.isnan(y)
+    x_valid = x[valid_idx]
+    y_valid = y[valid_idx]
+    return x_valid, y_valid
+
 def batched(iterable, n: int):
     """Converts a list into a list of tuples of every `n` elements.
     
@@ -1008,21 +1021,6 @@ class DemoForICAB(PausableScene):
             ),
         ]
         
-        def load_train_results(filepath: str | Path) -> tuple[list, dict[str, Any]]:
-            """Loads training results from JSON file."""
-            with open(str(filepath), 'r') as f:
-                d = json.load(f)
-            return d['reward'], d['metrics']
-        
-        
-        def remove_nan(x: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-            """Remove all indices of NaN values detected in `y` from both `x` and `y`."""
-            valid_idx = ~np.isnan(y)
-            x_valid = x[valid_idx]
-            y_valid = y[valid_idx]
-            return x_valid, y_valid
-        
-        
         # Create data series.
         series_df: dict[str, pd.DataFrame] = {}
         for series_kwargs in series:
@@ -1236,8 +1234,8 @@ class DemoForICAB(PausableScene):
         # Remove the pointer and tracker label.
         self.play(FadeOut(pointer), FadeOut(label))
         
-        
-        # self.play(FadeIn(*[group_graphs['series'][series_kwargs['key']]['std'] for series_kwargs in series]))
+        # Fade in the std plots.
+        self.play(*[FadeIn(group_graphs['series'][series_kwargs['key']]['std']) for series_kwargs in series], run_time=2)
         
         self.long_pause()
 
