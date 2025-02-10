@@ -8,6 +8,7 @@ import tempfile
 from typing import Any, Callable
 
 from manim import *
+from manim.typing import *
 import segno
 
 # config.disable_caching = True
@@ -38,6 +39,23 @@ def batched(iterable, n: int):
     """
     x = iter(iterable)
     return zip(*([x]*n))
+
+# class ImageWithLabel(Group):
+class MObjectWithLabel(Group):
+    def __init__(self, obj: Mobject, label: VMobject, direction: Vector3D = DOWN, buff: float = 0.1, **kwargs):
+        super().__init__(**kwargs)
+        label = label.next_to(obj, direction=direction, buff=buff)
+        self.obj = obj
+        self.label = label
+        self.add(obj, label)
+
+class VMObjectWithLabel(VGroup):
+    def __init__(self, obj: VMobject, label: VMobject, direction: Vector3D = DOWN, buff: float = 0.1, **kwargs):
+        super().__init__(**kwargs)
+        label = label.next_to(obj, direction=direction, buff=buff)
+        self.obj = obj
+        self.label = label
+        self.add(obj, label)
 
 
 class SegnoQRCodeImageMobject(ImageMobject):
@@ -147,9 +165,10 @@ class DemoForICAB(PausableScene):
         # Sections can be tested individually, to do this set `skip_animations=True` to turn off all other sections not used (note that the section will still be generated, allowing objects to move to their final position for use with future sections in the pipeline).
         sections: list[tuple[Callable, dict]] = [
             # (self.section_title, dict(name="Title", skip_animations=True)),
-            # (self.section_motivation, dict(name="Motivation", skip_animations=True)),
+            (self.section_motivation, dict(name="Motivation", skip_animations=True)),
             # (self.section_scenario, dict(name="Scenario", skip_animations=True)),
-            (self.section_results, dict(name="Results", skip_animations=False)),
+            (self.section_scenario_new, dict(name="Scenario-NEW", skip_animations=False)),
+            # (self.section_results, dict(name="Results", skip_animations=False)),
             # (self.section_outro, dict(name="Outro", skip_animations=True)), # Play last.
             (self.section_placeholder, dict(name="Placeholder", skip_animations=False)),
         ]
@@ -985,6 +1004,267 @@ class DemoForICAB(PausableScene):
         # # self.play(drone.animate.shift(RIGHT*2))
         # # self.play(drone.animate.rotate(45*DEGREES))
     
+    def section_scenario_new(self):
+        # tmptext = Text("What if we could collaborate without communi")
+        
+        # self.next_section('scenario-new-debug', skip_animations=True)
+        
+        # Objects with labels.
+        objs = {}
+        # Environments.
+        objs['env-left'] = MObjectWithLabel(
+            obj=ImageMobject("assets/images/wildfire-2.png").scale(0.3),
+            label=Text("Environment A", font_size=18),
+            buff=0.2,
+            direction=DOWN,
+        ).to_edge(DOWN).to_edge(LEFT, buff=1)
+        objs['env-right'] = MObjectWithLabel(
+            obj=ImageMobject("assets/images/wildfire.png").scale(0.3),
+            label=Text("Environment B", font_size=18),
+            buff=0.2,
+            direction=DOWN,
+        ).to_edge(DOWN).to_edge(RIGHT, buff=1)
+        # Drones.
+        objs['drone-left'] = MObjectWithLabel(
+            obj=ImageMobject("assets/images/quadcopter.png").scale(0.4),
+            label=Text("Drone A", font_size=18),
+            buff=0.1,
+            direction=UP,
+        ).next_to(objs['env-left'], UP, buff=1.75)
+        objs['drone-right'] = MObjectWithLabel(
+            obj=ImageMobject("assets/images/quadcopter.png").scale(0.4),
+            label=Text("Drone B", font_size=18),
+            buff=0.1,
+            direction=UP,
+        ).next_to(objs['env-right'], UP, buff=1.75)
+        # Obstacle.
+        objs['obstacle'] = MObjectWithLabel(
+            obj=ImageMobject("assets/images/mountain-3.png").scale(1.2),
+            label=Text("Environment Obstruction", font_size=18),
+            buff=0.2,
+            direction=DOWN,
+        ).to_edge(DOWN)
+        objs['nocom-left'] = MObjectWithLabel(
+            obj=ImageMobject("assets/images/no-speak.png").scale(0.15),
+            label=Text("Blocked P2P", font_size=18),
+            buff=0.1,
+            direction=UP,
+        ).next_to(objs['drone-left'], RIGHT*8)
+        objs['nocom-right'] = MObjectWithLabel(
+            obj=ImageMobject("assets/images/no-speak.png").scale(0.15),
+            label=Text("Blocked P2P", font_size=18),
+            buff=0.1,
+            direction=UP,
+        ).next_to(objs['drone-right'], LEFT*8)
+        # Qubits.
+        objs['qubit-left'] = MObjectWithLabel(
+            obj=Qubit(has_text=False, circle_color=PURPLE, ellipse_color=PURPLE).scale(0.25),
+            label=Text("Qubit A", font_size=18),
+            buff=0.1,
+            direction=UP,
+        ).to_edge(UP, buff=1.75).shift(LEFT*.75)
+        objs['qubit-right'] = MObjectWithLabel(
+            obj=Qubit(has_text=False, circle_color=PURPLE, ellipse_color=PURPLE).scale(0.25),
+            label=Text("Qubit B", font_size=18),
+            buff=0.1,
+            direction=UP,
+        ).to_edge(UP, buff=1.75).shift(RIGHT*.75)
+        
+        # Trackers.
+        trackers: dict[str, ValueTracker] = {}
+        trackers['alpha-0'] = ValueTracker(0)
+        trackers['amp-0'] = ValueTracker(0.1)
+        trackers['freq-0'] = ValueTracker(2*PI)
+        
+        # Waves.
+        waves: dict[str, VGroup] = {}
+        waves['ent-0'] = VGroup(*[
+            always_redraw(
+                lambda: FunctionGraph(
+                    lambda x: trackers['amp-0'].get_value()*np.sin(trackers['freq-0'].get_value()*x - trackers['alpha-0'].get_value()),
+                    x_range=[-1, 1],
+                    color=GRAY_C,
+                ).stretch_to_fit_width(abs(objs['qubit-left'].obj.get_x(RIGHT) - objs['qubit-right'].obj.get_x(LEFT))).next_to(objs['qubit-left'].obj, RIGHT, buff=0)
+            ),
+            always_redraw(
+                lambda: FunctionGraph(
+                    lambda x: trackers['amp-0'].get_value()*np.sin(trackers['freq-0'].get_value()*x + trackers['alpha-0'].get_value() + PI),
+                    x_range=[-1, 1],
+                    color=GRAY_D,
+                ).stretch_to_fit_width(abs(objs['qubit-left'].obj.get_x(RIGHT) - objs['qubit-right'].obj.get_x(LEFT))).next_to(objs['qubit-left'].obj, RIGHT, buff=0)
+            ),
+        ])
+        
+        # Arrows between the drones.
+        arrows = {}
+        # Ideal communication arrows.
+        arrows['ideal-com-lr'] = DashedVMobject(Arrow(
+            start=objs['drone-left'].obj.get_right(),
+            end=objs['drone-right'].obj.get_left(),
+            stroke_width=2,
+            tip_length=.2,
+            buff=0.4,
+        )).shift(UP*.2)
+        arrows['ideal-com-rl'] = DashedVMobject(Arrow(
+            start=objs['drone-right'].obj.get_left(),
+            end=objs['drone-left'].obj.get_right(),
+            stroke_width=2,
+            tip_length=.2,
+            buff=0.4,
+        )).shift(DOWN*.2)
+        # No communication arrows.
+        arrows['no-com-lr'] = Arrow(
+            start=objs['drone-left'].obj.get_right(),
+            end=objs['nocom-left'].obj.get_left(),
+            stroke_width=2,
+            tip_length=.2,
+            buff=0.2,
+            color=RED,
+        )
+        arrows['no-com-rl'] = Arrow(
+            start=objs['drone-right'].obj.get_left(),
+            end=objs['nocom-right'].obj.get_right(),
+            stroke_width=2,
+            tip_length=.2,
+            buff=0.2,
+            color=RED,
+        )
+        # Environment observation/action arrows.
+        # arrows['env-left-down'] = DashedVMobject(Arrow(
+        #     start=objs['drone-left'].obj.get_bottom(),
+        #     end=objs['env-left'].obj.get_top(),
+        #     stroke_width=2,
+        #     tip_length=.2,
+        #     buff=0.1,
+        # )).shift(LEFT*.2)
+        arrows['env-left-down'] = VMObjectWithLabel(
+            obj=DashedVMobject(Arrow(
+                start=objs['drone-left'].obj.get_bottom(),
+                end=objs['env-left'].obj.get_top(),
+                stroke_width=2,
+                tip_length=.2,
+                buff=0.1,
+            )),
+            label=Text("Actions", font_size=18),
+            direction=LEFT,
+        ).shift(LEFT*.2)
+        arrows['env-left-up'] = VMObjectWithLabel(
+            obj=DashedVMobject(Arrow(
+                start=objs['env-left'].obj.get_top(),
+                end=objs['drone-left'].obj.get_bottom(),
+                stroke_width=2,
+                tip_length=.2,
+                buff=0.1,
+            )),
+            label=Text("Observations", font_size=18),
+            direction=RIGHT,
+        ).shift(RIGHT*.2)
+        arrows['env-right-down'] = VMObjectWithLabel(
+            obj=DashedVMobject(Arrow(
+                start=objs['drone-right'].obj.get_bottom(),
+                end=objs['env-right'].obj.get_top(),
+                stroke_width=2,
+                tip_length=.2,
+                buff=0.1,
+            )),
+            label=Text("Actions", font_size=18),
+            direction=RIGHT,
+        ).shift(RIGHT*.2)
+        arrows['env-right-up'] = VMObjectWithLabel(
+            obj=DashedVMobject(Arrow(
+                start=objs['env-right'].obj.get_top(),
+                end=objs['drone-right'].obj.get_bottom(),
+                stroke_width=2,
+                tip_length=.2,
+                buff=0.1,
+            )),
+            label=Text("Observations", font_size=18),
+            direction=LEFT,
+        ).shift(LEFT*.2)
+        
+        # Text objects.
+        texts = {}
+        texts['imagine-0'] = Text("Imagine 2 separate environments", font_size=32).to_edge(UP, buff=1)
+        texts['imagine-1'] = Text("and 2 AI drones", font_size=32).to_edge(UP, buff=1)
+        texts['ideal-0'] = Text("In an ideal Scenario", font_size=32).to_edge(UP, buff=1)
+        texts['ideal-1'] = Text("The drones could collaborate", font_size=24).next_to(arrows['ideal-com-lr'], UP)
+        texts['ideal-2'] = Text("by directly sharing their experiences", font_size=24).next_to(arrows['ideal-com-rl'], DOWN)
+        texts['nocom-0'] = Text("But in certain environment conditions", font_size=32).to_edge(UP, buff=1)
+        texts['nocom-1'] = Text("this sharing of local information is not possible", font_size=32).next_to(texts['nocom-0'], DOWN) # to_edge(UP, buff=2) # Below above.
+        texts['quantum-0'] = Text("However...", font_size=32).to_edge(UP, buff=1)
+        texts['quantum-1'] = MarkupText(f"Using <span fgcolor=\"{PURPLE.to_hex()}\">Quantum Entanglement</span>", font_size=32).to_edge(UP, buff=1) # .next_to(texts['quantum-0'], RIGHT)
+        texts['quantum-2'] = Text("between the agents", font_size=32).next_to(texts['quantum-1'], DOWN)
+        texts['quantum-3'] = MarkupText(f"The drones can <span fgcolor=\"{PURPLE.to_hex()}\">entangle</span> their local experiences", font_size=32).to_edge(UP, buff=1)
+        texts['quantum-4'] = Text("to influence the actions of others", font_size=32).next_to(texts['quantum-3'], DOWN)
+        texts['quantum-5'] = Text("without direct communication", font_size=32).next_to(texts['quantum-4'], DOWN)
+        
+        
+        # Imagine.
+        self.play(Write(texts['imagine-0']))
+        self.play(FadeIn(objs['env-left']), FadeIn(objs['env-right']))
+        self.play(ReplacementTransform(texts['imagine-0'], texts['imagine-1']))
+        self.play(FadeIn(objs['drone-left']), FadeIn(objs['drone-right']))
+        self.play(FadeOut(texts['imagine-1']))
+        
+        # Ideal.
+        self.play(Write(texts['ideal-0']))
+        self.play(
+            Write(arrows['env-left-up']),
+            Write(arrows['env-left-down']),
+            Write(arrows['env-right-up']),
+            Write(arrows['env-right-down']),
+        )
+        self.play(Write(texts['ideal-1']), Write(arrows['ideal-com-lr']))
+        self.play(Write(texts['ideal-2']), Write(arrows['ideal-com-rl']))
+        self.play(FadeOut(texts['ideal-0']), FadeOut(texts['ideal-1']), FadeOut(arrows['ideal-com-lr']), FadeOut(texts['ideal-2']), FadeOut(arrows['ideal-com-rl']))
+        self.small_pause()
+        
+        # No communication.
+        self.play(Write(texts['nocom-0']))
+        self.play(FadeIn(objs['obstacle']))
+        # self.play(Write(texts['nocom-1']))
+        self.play(
+            Write(texts['nocom-1']),
+            FadeIn(objs['nocom-left']),
+            FadeIn(objs['nocom-right']),
+            FadeIn(arrows['no-com-lr']),
+            FadeIn(arrows['no-com-rl']),
+        )
+        self.wait(1)
+        self.play(
+            FadeOut(texts['nocom-0']),
+            FadeOut(texts['nocom-1']),
+            FadeOut(objs['nocom-left']),
+            FadeOut(objs['nocom-right']),
+            FadeOut(arrows['no-com-lr']),
+            FadeOut(arrows['no-com-rl']),
+        )
+        
+        # Quantum.
+        self.play(Write(texts['quantum-0']))
+        self.wait(1)
+        self.play(ReplacementTransform(texts['quantum-0'], texts['quantum-1']))
+        self.play(FadeIn(objs['qubit-left']), FadeIn(objs['qubit-right']))
+        self.play(Write(waves['ent-0']))
+        self.play(trackers['alpha-0'].animate.set_value(2*PI))
+        self.play(trackers['alpha-0'].animate.set_value(0))
+        # self.play(FadeOut(texts['quantum-1']), FadeOut(waves['ent-0']))
+        objs['obstacle'].set_z_index(1) # On top.
+        self.play(
+            Write(texts['quantum-2']),
+            trackers['amp-0'].animate.set_value(.2),
+            trackers['freq-0'].animate.set_value(4*PI),
+            objs['qubit-left'].animate.next_to(objs['drone-left'], RIGHT),
+            objs['qubit-right'].animate.next_to(objs['drone-right'], LEFT),
+        )
+        self.play(FadeOut(texts['quantum-2']), ReplacementTransform(texts['quantum-1'], texts['quantum-3']))
+        self.play(Write(texts['quantum-4']))
+        self.play(trackers['alpha-0'].animate.set_value(2*PI))
+        self.play(trackers['alpha-0'].animate.set_value(0))
+        self.play(Write(texts['quantum-5']))
+        self.play(trackers['alpha-0'].animate.set_value(2*PI))
+        self.play(trackers['alpha-0'].animate.set_value(0))
+    
     
     def section_results(self):
         """Experiement result graph dispaly."""
@@ -1239,7 +1519,6 @@ class DemoForICAB(PausableScene):
         
         self.long_pause()
 
-    
     def section_outro(self):
         """Outro section.
         
