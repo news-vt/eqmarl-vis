@@ -1069,6 +1069,7 @@ class DemoForICAB(PausableScene):
             x_label=Text('Epoch', font_size=24),
             y_label=Text('Score', font_size=24),
         )
+        tracker_x_value = ValueTracker(x_range[0]) # For animating x-axis.
         
         # Bundle the axis and series graphs together.
         group_graphs = VDict({
@@ -1092,19 +1093,10 @@ class DemoForICAB(PausableScene):
             y = metric_df.rolling(10).mean().to_numpy().flatten()
             x = np.arange(data.shape[-1]) # 0, 1, ..., N-1
             
+            
             # Remove all NaN values.
             # Manim will linearly interpolate between gaps in data.
             x_valid, y_valid = remove_nan(x, y)
-            
-            # Plot the data points as a line without vertex dots.
-            graph_mean = ax.plot_line_graph(
-                x_values=x_valid,
-                y_values=y_valid,
-                add_vertex_dots=False,
-                line_color=ManimColor.from_rgb(series_kwargs['color']), # RGB color.
-                stroke_width=2, # Default is 2.
-            )
-            graph_mean.set_z_index(series_kwargs['zorder']) # Set Z order (larger numbers on top).
             
             # Plot +/- standard deviation.
             y_std = np.std(data, axis=0)# (3000,)
@@ -1114,14 +1106,66 @@ class DemoForICAB(PausableScene):
             # Filter NaN.
             x_std_upper_values, y_std_upper_values = remove_nan(x, y_std_upper_values)
             x_std_lower_values, y_std_lower_values = remove_nan(x, y_std_lower_values)
-            # Convert (x,y) coordinates on graph to points in Manim.
-            y_std_upper_points = [ax.c2p(x, y) for x, y in zip(x_std_upper_values, y_std_upper_values)] # +1 std.
-            y_std_lower_points = [ax.c2p(x, y) for x, y in zip(x_std_lower_values, y_std_lower_values)] # -1 std.
-            # Create a `Polygon` using the upper and lower points.
-            graph_std = Polygon(*y_std_upper_points, *reversed(y_std_lower_points), color=ManimColor.from_rgb(series_kwargs['color']), fill_opacity=0.4, stroke_width=0.1) # Points are added in counter-clockwise order. Upper points are ok as-is from increasing X order, but lower points need to be reversed.
-            graph_std.set_z_index(series_kwargs['zorder']) # Set Z order (larger numbers on top).
+            
+            def make_line(
+                x_valid=x_valid,
+                y_valid=y_valid,
+                color=series_kwargs['color'],
+                zorder=series_kwargs['zorder'],
+                ):
+                """Generates a line plot from (x,y) data points.
+                
+                This function can be used with `always_redraw`.
+                
+                Function keyword arguments are set to allow data caching between frame calls.
+                """
+                # Check that we have data points with the mask, otherwise just return an empty `VGroup` object (this is really only a problem when the tracker is at the first data point).
+                mask = x_valid <= tracker_x_value.get_value()
+                if len(x_valid[mask]) > 0:
+                    zorder = zorder + len(series) + 1 # Offset Z index to ensure on top of shaded plots.
+                    graph_mean = ax.plot_line_graph(
+                        x_values=x_valid[mask],
+                        y_values=y_valid[mask],
+                        add_vertex_dots=False,
+                        line_color=ManimColor.from_rgb(color), # RGB color.
+                        stroke_width=2, # Default is 2.
+                    )
+                    graph_mean.set_z_index(zorder)
+                    return VGroup(*[
+                        graph_mean,
+                        Dot(ax.c2p(x_valid[mask][-1], y_valid[mask][-1]), color=ManimColor.from_rgb(color)).set_z_index(zorder), # Add a leading dot.
+                    ])
+                else:
+                    return VGroup()
+
+            def make_shaded(
+                x_std_upper_values=x_std_upper_values,
+                y_std_upper_values=y_std_upper_values,
+                x_std_lower_values=x_std_lower_values,
+                y_std_lower_values=y_std_lower_values,
+                color=series_kwargs['color'],
+                zorder=series_kwargs['zorder'],
+                ):
+                """Generates a plot of shaded regions representing +/- standard deviation around (x,y) data points.
+                
+                This function can be used with `always_redraw`.
+                
+                Function keyword arguments are set to allow data caching between frame calls.
+                """
+                # Check that we have data points with the mask, otherwise just return an empty `VGroup` object (this is really only a problem when the tracker is at the first data point).
+                if len(x_valid[x_valid <= tracker_x_value.get_value()]) > 0:
+                    y_std_upper_points = [ax.c2p(x, y) for x, y in zip(x_std_upper_values[x_valid <= tracker_x_value.get_value()], y_std_upper_values[x_valid <= tracker_x_value.get_value()])] # +1 std.
+                    y_std_lower_points = [ax.c2p(x, y) for x, y in zip(x_std_lower_values[x_valid <= tracker_x_value.get_value()], y_std_lower_values[x_valid <= tracker_x_value.get_value()])] # -1 std.
+                    # Create a `Polygon` using the upper and lower points.
+                    graph_std = Polygon(*y_std_upper_points, *reversed(y_std_lower_points), color=color, fill_opacity=0.3, stroke_width=0.1) # Points are added in counter-clockwise order. Upper points are ok as-is from increasing X order, but lower points need to be reversed.
+                    graph_std.set_z_index(zorder) # Set Z order (larger numbers on top).
+                    return graph_std
+                else:
+                    return VGroup()
             
             # Bundle the mean and std graphs for the current series.
+            graph_mean = always_redraw(make_line)
+            graph_std = always_redraw(make_shaded)
             g = VDict({
                 'mean': graph_mean,
                 'std': graph_std,
@@ -1141,7 +1185,7 @@ class DemoForICAB(PausableScene):
             group_graphs['legend'][series_kwargs['key']]['glyph'].scale(0.25)
             group_graphs['legend'][series_kwargs['key']]['label'].next_to(group_graphs['legend'][series_kwargs['key']]['glyph'], RIGHT, buff=0.2)
         group_graphs['legend'].arrange(buff=0.5) # Arrange in a horizontal line.
-        group_graphs['legend'].next_to(group_graphs['ax'], DOWN)
+        group_graphs['legend'].next_to(group_graphs['ax'], UP)
         # Add a bounding box to legend.
         group_graphs['legend-box'] = SurroundingRectangle(group_graphs['legend'], color=GRAY_C, buff=0.2, corner_radius=0.1)
 
@@ -1150,79 +1194,59 @@ class DemoForICAB(PausableScene):
         self.play(Create(group_graphs['ax']), FadeIn(group_graphs['labels']), Write(group_graphs['legend-box']))
 
         # Animate the plots in a specific order.
+        # Do not add std plots yet because we don't want those to show when the value tracker is updating.
         for series_kwargs in series:
-            self.play(
-                Create(group_graphs['series'][series_kwargs['key']]['mean']),
-                FadeIn(group_graphs['series'][series_kwargs['key']]['std']),
-                FadeIn(group_graphs['legend'][series_kwargs['key']]),
+            self.add(
+                group_graphs['series'][series_kwargs['key']]['mean'],
+                group_graphs['legend'],
             )
+            # self.play(
+            #     Create(group_graphs['series'][series_kwargs['key']]['mean']),
+            #     # FadeIn(group_graphs['series'][series_kwargs['key']]['std']),
+            #     FadeIn(group_graphs['legend'][series_kwargs['key']]),
+            # )
+        
+        # # Add lines for the moving dots.
+        # lines = always_redraw(
+        #     lambda: VGroup(*[
+        #         DashedVMobject(Line(start=))
+        #         for series_kwargs in series
+        #     ]),
+        # )
         
         
-        # self.play(group_graphs.animate.scale(0.5).shift(UP))
-        # self.play(group_graphs.animate.shift(DOWN*2))
-        # self.play(group_graphs.animate.shift(RIGHT*2))
-            
+        # Create a pointer for animating the epochs.
+        pointer = always_redraw(
+            lambda: Vector(UP).scale(0.5).next_to(
+                ax.x_axis.n2p(tracker_x_value.get_value()),
+                DOWN,
+            )
+        )
+        label = always_redraw(
+            lambda pointer=pointer: MathTex(f"e={tracker_x_value.get_value():.0f}", font_size=24).next_to(pointer, DOWN)
+        ).next_to(pointer, DOWN)
+        
+        
+        # Add the pointer and label.
+        self.play(FadeIn(pointer), FadeIn(label))
+        
+        # Animate the plots from left-to-right by setting the tracker value to the end value.
+        self.play(tracker_x_value.animate.set_value(x_range[-1]), run_time=5)
+        
+        # Remove the pointer and tracker label.
+        self.play(FadeOut(pointer), FadeOut(label))
+        
+        
+        # self.play(FadeIn(*[group_graphs['series'][series_kwargs['key']]['std'] for series_kwargs in series]))
+        
         self.long_pause()
-            
 
-        # print(df)
-        
-        
-        # tmptext = Text(f"{df.shape=}, {len(series)=}")
-        # self.add(tmptext)
-        
-        
-        
-        
-        # x = np.array(np.arange(0, 100))
-        # # y = np.array([np.sin(x) for i in x])
-        # y = np.array([(-5 + x*i) for i in range(4)]).clip(-5, 30)
-        # # print(f"{y.shape=}")
-        # # print(f"{len(x)=}, {x=}")
-        # # print(f"{len(y)=}, {y=}")
-        # ax = Axes(
-        #     x_range=[x.min(), x.max()+10, 10], # +10 includes endpoints
-        #     y_range=[y.min(), y.max()+5, 5], # +5 includes endpoints
-        #     axis_config={'include_numbers': True},
-        #     tips=True,
-        # )
-        # # .scale_to_fit_width(config.frame_width)
-        # self.play(Create(ax))
-        
-        # g = ax.plot_line_graph(
-        #     x_values=x,
-        #     y_values=y[1,:],
-        #     add_vertex_dots=False,
-        # )
-        
-        # # +/- 1 std
-        # y_std = 2
-        # y_upper = y[1,:] + y_std
-        # y_lower = y[1,:] - y_std
-        
-        # # y_upper_points = [ax.c2p(x, w) for x, w in zip(x, y_upper)]
-        # # # y_lower_points = [ax.c2p(x, w) for x, w in zip(x, y_lower)]
-        # # y_lower_points = []
-        # # shaded_region = Polygon(*y_upper_points, *y_lower_points, color=BLUE, fill_opacity=0.3, stroke_width=0)
-        
-        # shaded_region = g.area
-        
-        # self.play(Create(g))
-        # self.play(Create(shaded_region))
-        
-        # graphs = VGroup([])
-        # for row in y:
-        #     g = ax.plot_line_graph(
-        #         x_values=x,
-        #         y_values=row,
-        #         add_vertex_dots=False,
-        #     )
-        #     graphs += g
-        #     self.play(Create(g))
-        # self.play(Create(graph))
-    
     
     def section_outro(self):
+        """Outro section.
+        
+        This is the last section played in the video.
+        """
         
         qr = segno.make("https://arxiv.org/abs/2405.17486", micro=False, error='H')
         img = SegnoQRCodeImageMobject(qr, scale=100, dark=GRAY_A.to_hex(), finder_dark=PURPLE.to_hex(), border=0, light=None).scale(0.1)
