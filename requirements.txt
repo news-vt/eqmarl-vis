@@ -1,4 +1,5 @@
 ipykernel
 manim
+pandas
 segno
 qrcode-artistic

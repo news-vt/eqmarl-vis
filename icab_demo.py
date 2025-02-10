@@ -1,7 +1,11 @@
 import itertools
+import glob
+import json
 import os
+import pandas as pd
+from pathlib import Path
 import tempfile
-from typing import Callable
+from typing import Any, Callable
 
 from manim import *
 import segno
@@ -129,9 +133,10 @@ class DemoForICAB(PausableScene):
         # Each section should cleanup any objects after itself if they are not to be used again.
         # Sections can be tested individually, to do this set `skip_animations=True` to turn off all other sections not used (note that the section will still be generated, allowing objects to move to their final position for use with future sections in the pipeline).
         sections: list[tuple[Callable, dict]] = [
-            (self.section_title, dict(name="Title", skip_animations=True)),
-            (self.section_motivation, dict(name="Motivation", skip_animations=True)),
-            (self.section_scenario, dict(name="Scenario", skip_animations=False)),
+            # (self.section_title, dict(name="Title", skip_animations=True)),
+            # (self.section_motivation, dict(name="Motivation", skip_animations=True)),
+            # (self.section_scenario, dict(name="Scenario", skip_animations=True)),
+            (self.section_results, dict(name="Results", skip_animations=False)),
             # (self.section_outro, dict(name="Outro", skip_animations=True)), # Play last.
             (self.section_placeholder, dict(name="Placeholder", skip_animations=False)),
         ]
@@ -198,7 +203,6 @@ class DemoForICAB(PausableScene):
         self.medium_pause()
         
         self.play(FadeOut(eqmarl_full), FadeOut(subtitle_text), eqmarl_acronym.animate.scale(0.5).to_edge(UL), ReplacementTransform(attribution_text_full, self.attribution_text))
-
 
     def section_motivation(self):
         """Motivation section."""
@@ -546,7 +550,7 @@ class DemoForICAB(PausableScene):
         ###
         # Scenario diagram.
         ###
-        self.next_section("scenario-diagram", skip_animations=False) # TODO: delete.
+        self.next_section("scenario-diagram", skip_animations=True) # TODO: delete.
         
         
         
@@ -871,45 +875,51 @@ class DemoForICAB(PausableScene):
             img_rain_right.animate.move_to(img_fire_trees.get_center()).set_opacity(0),
         )
         
+        # Fade everything out except watermarks and title.
+        g = Group(*list(set(self.mobjects) - set([self.eqmarl_acronym, self.attribution_text, section_title])))
+        self.play(FadeOut(g))
+        
+        
+        
         
         
         
 
         
         
-        return
+        # return
         
         
-        t0 = Text(
-            text="The wildfires in California have spread at an unprecedented rate",
-            t2c={'wildfires': RED}
-        )
-        t0.scale_to_fit_width(.9*config.frame_width)
-        print(f"{t0.font_size=}")
-        self.play(Write(t0))
-        self.wait()
+        # t0 = Text(
+        #     text="The wildfires in California have spread at an unprecedented rate",
+        #     t2c={'wildfires': RED}
+        # )
+        # t0.scale_to_fit_width(.9*config.frame_width)
+        # print(f"{t0.font_size=}")
+        # self.play(Write(t0))
+        # self.wait()
         
-        t1 = Text("Rapidly and efficiently extinguishing these fires has arisen to be a major challenge")
-        t1.scale_to_fit_width(.8*config.frame_width)
-        t1.next_to(t0, DOWN)
-        self.play(Write(t1))
+        # t1 = Text("Rapidly and efficiently extinguishing these fires has arisen to be a major challenge")
+        # t1.scale_to_fit_width(.8*config.frame_width)
+        # t1.next_to(t0, DOWN)
+        # self.play(Write(t1))
         
-        # Group text boxes and move them both up as a unit.
-        g0 = VGroup(t0, t1)
-        self.play(g0.animate.shift(UP*2))
+        # # Group text boxes and move them both up as a unit.
+        # g0 = VGroup(t0, t1)
+        # self.play(g0.animate.shift(UP*2))
         
-        t2 = Text("Firefighters on the ground have a limited localized view of the spreading flames")
-        t2.scale_to_fit_width(.9*config.frame_width)
-        self.play(Write(t2))
+        # t2 = Text("Firefighters on the ground have a limited localized view of the spreading flames")
+        # t2.scale_to_fit_width(.9*config.frame_width)
+        # self.play(Write(t2))
         
-        img_fire = ImageMobject("assets/images/fire.png")
-        self.add(img_fire)
+        # img_fire = ImageMobject("assets/images/fire.png")
+        # self.add(img_fire)
         
-        img_fireman = ImageMobject("assets/images/fireman.png")
-        self.add(img_fireman)
+        # img_fireman = ImageMobject("assets/images/fireman.png")
+        # self.add(img_fireman)
         
-        img_drone = ImageMobject("assets/images/drone.png")
-        self.add(img_drone)
+        # img_drone = ImageMobject("assets/images/drone.png")
+        # self.add(img_drone)
         
         ########
         
@@ -961,6 +971,256 @@ class DemoForICAB(PausableScene):
         
         # # self.play(drone.animate.shift(RIGHT*2))
         # # self.play(drone.animate.rotate(45*DEGREES))
+    
+    
+    def section_results(self):
+        """Experiement result graph dispaly."""
+        
+        # Data to display.
+        series: list[dict] = [
+            dict(
+                key='$\\mathtt{fCTDE}$',
+                blob='experiment_output/coingame_maa2c_mdp_fctde/20240501T185443/metrics-[0-9].json',
+                # color=[0.8666666666666667,0.5176470588235295,0.3215686274509804],
+                color=ORANGE.to_rgb(),
+                zorder=1,
+            ),
+            dict(
+                key='$\\mathtt{qfCTDE}$',
+                blob='experiment_output/coingame_maa2c_mdp_qfctde/20240503T151226/metrics-[0-9].json',
+                # color=[0.8549019607843137, 0.5450980392156862, 0.7647058823529411],
+                color=PINK.to_rgb(),
+                zorder=2,
+            ),
+            dict(
+                key='$\\mathtt{sCTDE}$',
+                blob='experiment_output/coingame_maa2c_mdp_sctde/20240418T133421/metrics-[0-9].json',
+                # color=[0.3333333333333333,0.6588235294117647,0.40784313725490196],
+                color=GREEN.to_rgb(),
+                zorder=3,
+            ),
+            dict(
+                key='$\\mathtt{eQMARL-}\Psi^{+}$',
+                blob='experiment_output/coingame_maa2c_mdp_eqmarl_psi+/20240501T152929/metrics-[0-9].json',
+                # color=[0.2980392156862745,0.4470588235294118,0.6901960784313725],
+                color=BLUE.to_rgb(),
+                zorder=4,
+            ),
+        ]
+        
+        def load_train_results(filepath: str | Path) -> tuple[list, dict[str, Any]]:
+            """Loads training results from JSON file."""
+            with open(str(filepath), 'r') as f:
+                d = json.load(f)
+            return d['reward'], d['metrics']
+        
+        
+        def remove_nan(x: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+            """Remove all indices of NaN values detected in `y` from both `x` and `y`."""
+            valid_idx = ~np.isnan(y)
+            x_valid = x[valid_idx]
+            y_valid = y[valid_idx]
+            return x_valid, y_valid
+        
+        
+        # Create data series.
+        series_df: dict[str, pd.DataFrame] = {}
+        for series_kwargs in series:
+            key, blob = series_kwargs['key'], series_kwargs['blob']
+            
+            files = glob.glob(str(Path(blob).expanduser()))
+            assert len(files) > 0, f"No files found for blob: {blob}"
+            session_reward_history = []
+            session_metrics_history = []
+            for f in files:
+                reward_history, metrics_history = load_train_results(str(f))
+                session_reward_history.append(reward_history)
+                # session_metrics_history.append(metrics_history)
+                session_metrics_history.append({
+                    **metrics_history,
+                    # "reward": reward_history,
+                    "reward_mean": np.mean(np.array(reward_history), axis=-1),
+                    "reward_std": np.std(np.array(reward_history), axis=-1),
+                    "reward_max": np.max(np.array(reward_history), axis=-1),
+                    "reward_min": np.min(np.array(reward_history), axis=-1),
+                    })
+                
+            # Reshape to proper matrix.
+            session_reward_history = session_reward_history
+            session_reward_history = np.array(session_reward_history)
+            
+            df = pd.DataFrame(session_metrics_history)
+            series_df[key] = df
+        
+        
+        # Create axis.
+        x_tick_interval = 500
+        y_tick_interval = 5
+        x_range = (0, 3000)
+        y_range = (-5, 30)
+        ax = Axes(
+            x_range=[x_range[0], x_range[1]+x_tick_interval, x_tick_interval], # +interval includes endpoints
+            y_range=[y_range[0], y_range[1]+y_tick_interval, y_tick_interval], # +interval includes endpoints
+            axis_config={'include_numbers': True},
+            tips=True,
+        )
+        # Create labels for axis.
+        labels = ax.get_axis_labels(
+            x_label=Text('Epoch', font_size=24),
+            y_label=Text('Score', font_size=24),
+        )
+        
+        # Bundle the axis and series graphs together.
+        group_graphs = VDict({
+            'ax': ax,
+            'labels': labels,
+            'series': VDict({}), # Keys will match series keys.
+            'legend': VDict({}), # Keys will match series keys.
+        })
+        
+        # Create plots for `mean` and `std` metrics.
+        metric_key_to_plot = 'undiscounted_reward' # Plot this metric.
+        for series_kwargs in series:
+            df = series_df[series_kwargs['key']]
+
+            df_arr = np.array(df.values.tolist())
+            i = list(df.columns).index(metric_key_to_plot) # Index of metric key within frame column.
+            data = df_arr[:,i,:] # Data to plot.
+            
+            # Plot type: 'mean-rolling'
+            metric_df = pd.DataFrame(np.mean(data, axis=0))
+            y = metric_df.rolling(10).mean().to_numpy().flatten()
+            x = np.arange(data.shape[-1]) # 0, 1, ..., N-1
+            
+            # Remove all NaN values.
+            # Manim will linearly interpolate between gaps in data.
+            x_valid, y_valid = remove_nan(x, y)
+            
+            # Plot the data points as a line without vertex dots.
+            graph_mean = ax.plot_line_graph(
+                x_values=x_valid,
+                y_values=y_valid,
+                add_vertex_dots=False,
+                line_color=ManimColor.from_rgb(series_kwargs['color']), # RGB color.
+                stroke_width=2, # Default is 2.
+            )
+            graph_mean.set_z_index(series_kwargs['zorder']) # Set Z order (larger numbers on top).
+            
+            # Plot +/- standard deviation.
+            y_std = np.std(data, axis=0)# (3000,)
+            n = 1 # Default is 1 std above/below the data.
+            y_std_upper_values = y + y_std * n
+            y_std_lower_values = y - y_std * n
+            # Filter NaN.
+            x_std_upper_values, y_std_upper_values = remove_nan(x, y_std_upper_values)
+            x_std_lower_values, y_std_lower_values = remove_nan(x, y_std_lower_values)
+            # Convert (x,y) coordinates on graph to points in Manim.
+            y_std_upper_points = [ax.c2p(x, y) for x, y in zip(x_std_upper_values, y_std_upper_values)] # +1 std.
+            y_std_lower_points = [ax.c2p(x, y) for x, y in zip(x_std_lower_values, y_std_lower_values)] # -1 std.
+            # Create a `Polygon` using the upper and lower points.
+            graph_std = Polygon(*y_std_upper_points, *reversed(y_std_lower_points), color=ManimColor.from_rgb(series_kwargs['color']), fill_opacity=0.4, stroke_width=0.1) # Points are added in counter-clockwise order. Upper points are ok as-is from increasing X order, but lower points need to be reversed.
+            graph_std.set_z_index(series_kwargs['zorder']) # Set Z order (larger numbers on top).
+            
+            # Bundle the mean and std graphs for the current series.
+            g = VDict({
+                'mean': graph_mean,
+                'std': graph_std,
+            })
+            
+            # Preserve graphs for current series.
+            group_graphs['series'][series_kwargs['key']] = g
+            
+            # Preserve legend elements for current series.
+            group_graphs['legend'][series_kwargs['key']] = VDict({
+                'glyph': Line(color=ManimColor.from_rgb(series_kwargs['color'])),
+                'label': Tex(series_kwargs['key'], font_size=18),
+            })
+
+        # Set the legend positioning.
+        for series_kwargs in series:
+            group_graphs['legend'][series_kwargs['key']]['glyph'].scale(0.25)
+            group_graphs['legend'][series_kwargs['key']]['label'].next_to(group_graphs['legend'][series_kwargs['key']]['glyph'], RIGHT, buff=0.2)
+        group_graphs['legend'].arrange(buff=0.5) # Arrange in a horizontal line.
+        group_graphs['legend'].next_to(group_graphs['ax'], DOWN)
+        # Add a bounding box to legend.
+        group_graphs['legend-box'] = SurroundingRectangle(group_graphs['legend'], color=GRAY_C, buff=0.2, corner_radius=0.1)
+
+
+        # Animate the axis, axis-labels, and the legend-box.
+        self.play(Create(group_graphs['ax']), FadeIn(group_graphs['labels']), Write(group_graphs['legend-box']))
+
+        # Animate the plots in a specific order.
+        for series_kwargs in series:
+            self.play(
+                Create(group_graphs['series'][series_kwargs['key']]['mean']),
+                FadeIn(group_graphs['series'][series_kwargs['key']]['std']),
+                FadeIn(group_graphs['legend'][series_kwargs['key']]),
+            )
+        
+        
+        # self.play(group_graphs.animate.scale(0.5).shift(UP))
+        # self.play(group_graphs.animate.shift(DOWN*2))
+        # self.play(group_graphs.animate.shift(RIGHT*2))
+            
+        self.long_pause()
+            
+
+        # print(df)
+        
+        
+        # tmptext = Text(f"{df.shape=}, {len(series)=}")
+        # self.add(tmptext)
+        
+        
+        
+        
+        # x = np.array(np.arange(0, 100))
+        # # y = np.array([np.sin(x) for i in x])
+        # y = np.array([(-5 + x*i) for i in range(4)]).clip(-5, 30)
+        # # print(f"{y.shape=}")
+        # # print(f"{len(x)=}, {x=}")
+        # # print(f"{len(y)=}, {y=}")
+        # ax = Axes(
+        #     x_range=[x.min(), x.max()+10, 10], # +10 includes endpoints
+        #     y_range=[y.min(), y.max()+5, 5], # +5 includes endpoints
+        #     axis_config={'include_numbers': True},
+        #     tips=True,
+        # )
+        # # .scale_to_fit_width(config.frame_width)
+        # self.play(Create(ax))
+        
+        # g = ax.plot_line_graph(
+        #     x_values=x,
+        #     y_values=y[1,:],
+        #     add_vertex_dots=False,
+        # )
+        
+        # # +/- 1 std
+        # y_std = 2
+        # y_upper = y[1,:] + y_std
+        # y_lower = y[1,:] - y_std
+        
+        # # y_upper_points = [ax.c2p(x, w) for x, w in zip(x, y_upper)]
+        # # # y_lower_points = [ax.c2p(x, w) for x, w in zip(x, y_lower)]
+        # # y_lower_points = []
+        # # shaded_region = Polygon(*y_upper_points, *y_lower_points, color=BLUE, fill_opacity=0.3, stroke_width=0)
+        
+        # shaded_region = g.area
+        
+        # self.play(Create(g))
+        # self.play(Create(shaded_region))
+        
+        # graphs = VGroup([])
+        # for row in y:
+        #     g = ax.plot_line_graph(
+        #         x_values=x,
+        #         y_values=row,
+        #         add_vertex_dots=False,
+        #     )
+        #     graphs += g
+        #     self.play(Create(g))
+        # self.play(Create(graph))
+    
     
     def section_outro(self):
         
