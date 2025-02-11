@@ -1,3 +1,4 @@
+from enum import IntEnum
 import itertools
 import glob
 import json
@@ -40,7 +41,15 @@ def batched(iterable, n: int):
     x = iter(iterable)
     return zip(*([x]*n))
 
-# class ImageWithLabel(Group):
+def negative_index_rollover(i: int, size: int) -> int:
+    """Convert an index `i` from negative to positive.
+    
+    Example:
+    size=5, i=-1 -> i=4 # Index from the end.
+    size=5, i=3 -> i=3 # No change.
+    """
+    return i if i >= 0 else i+size
+
 class MObjectWithLabel(Group):
     def __init__(self, obj: Mobject, label: VMobject, direction: Vector3D = DOWN, buff: float = 0.1, **kwargs):
         super().__init__(**kwargs)
@@ -135,6 +144,336 @@ class Qubit(VMobject):
     
     def set_state_angle(self, angle: float):
         return self.group['shapes']['arrow'].put_start_and_end_on(self.group['shapes']['circle'].get_center(), self.group['shapes']['circle'].point_at_angle(angle))
+
+
+
+class MinigridAction(IntEnum):
+    LEFT = 0
+    RIGHT = 1
+    FORWARD = 2
+    
+
+# class MiniGridPlayer(VGroup):
+class RotationTrackableVGroup(VGroup):
+    
+    def __init__(self, *args, angle: float = 0., **kwargs):
+        super().__init__(*args, **kwargs)
+        # self.tracker_r = ValueTracker(0)
+        # self.tracker_c = ValueTracker(1)
+        self.tracker_angle = ValueTracker(angle)
+        # self._invisible_line = Line(self.get_top(), self.get_bottom(), stroke_width=0)
+        # self._invisible_line = Line(self.get_bottom(), self.get_top(), stroke_width=0)
+        # self._invisible_line = Line(self.get_right(), self.get_left(), stroke_width=0)
+        self._invisible_line = Line(self.get_left(), self.get_right(), stroke_width=0) # 0 degrees.
+        # self._invisible_line = Line(ORIGIN, ORIGIN+RIGHT, stroke_width=0)
+        self.add(self._invisible_line)
+
+        # self.add(VGroup(*[
+        #     Triangle(color=RED, fill_opacity=0.5),
+        #     Dot(Triangle().get_top()) # Dot represents the leading tip of the player triangle.
+        # ],z_index=1).rotate(270*DEGREES), # Higher z-index sets on top.
+        # )
+    
+    def get_angle(self):
+        # return self.tracker_angle.get_value()
+        return self._invisible_line.get_angle()
+    
+    # def rotate(self, angle: float, *args, **kwargs):
+    #     # self.tracker_angle.set_value(angle*(180./PI)) # Track the look angle in degrees.
+    #     # self.tracker_angle.set_value(angle) # Track the look angle in radians.
+    #     return super().rotate(angle, *args, **kwargs)
+
+class MiniGrid(VGroup):
+    
+    # Common objects for reuse.
+    assets: dict[str, VMobject] = {
+        'grid_empty': Square(color=GRAY, fill_opacity=0),
+        'grid_lava': Square(color=ORANGE, fill_opacity=0.5),
+        'grid_goal': Square(color=GREEN, fill_opacity=0.5),
+        # 'player': VGroup(*[
+        #     Triangle(color=RED, fill_opacity=0.5),
+        #     Dot(Triangle().get_top()) # Dot represents the leading tip of the player triangle.
+        # ],z_index=1).rotate(270*DEGREES), # Higher z-index sets on top.
+        'player': RotationTrackableVGroup(VGroup(*[
+            Triangle(color=RED, fill_opacity=0.5),
+            Dot(Triangle().get_top()) # Dot represents the leading tip of the player triangle.
+        ],z_index=1)).rotate(270*DEGREES), # Higher z-index sets on top.
+        # 'player': MiniGridPlayer(),
+    }
+    
+    def __init__(self, 
+        grid_size: tuple[int,int], 
+        player_look_angle: float = 270, # degrees, RIGHT
+        player_grid_pos: tuple[int,int] = (0,0), # Top-left.
+        goal_grid_pos: tuple[int,int] = (-1, -1),
+        hazards_grid_pos: list[tuple[int,int]] = [],
+        **kwargs,
+        ):
+        super().__init__(**kwargs)
+        self.grid_size = grid_size
+        
+        # Support for negative indexing.
+        player_grid_pos = tuple(negative_index_rollover(i, size) for i,size in zip(player_grid_pos, grid_size))
+        goal_grid_pos = tuple(negative_index_rollover(i, size) for i,size in zip(goal_grid_pos, grid_size))
+        hazards_grid_pos = [tuple(negative_index_rollover(i, size) for i,size in zip(haz, grid_size)) for haz in hazards_grid_pos]
+        
+        # Defaults to `RIGHT`, and upper-left (0,0).
+        self.player_look_angle = player_look_angle
+        self.player_grid_pos = player_grid_pos
+        # self.tracker_player_grid_pos_r = ValueTracker(player_grid_pos[0])
+        # self.tracker_player_grid_pos_c = ValueTracker(player_grid_pos[1])
+        # print(f"{player_grid_pos=}")
+        # self.player_grid_pos_var = Variable(np.array(list(player_grid_pos)), "player_grid_pos")
+        # self.player_grid_pos_var = ValueTracker(np.array(player_grid_pos))
+        # self.player_grid_pos_x = ValueTracker(player_grid_pos[0])
+        # self.player_grid_pos_y = ValueTracker(player_grid_pos[1])
+        # self.player_grid_pos_z = ValueTracker(player_grid_pos[1])
+        self.goal_pos = goal_grid_pos
+        self.hazards_grid_pos = hazards_grid_pos
+        
+        # Build the grid using assets.
+        world_dict = self.build_minigrid(
+            grid_size=grid_size,
+            player_pos=player_grid_pos,
+            goal_pos=self.goal_pos,
+            hazards=self.hazards_grid_pos,
+            grid_obj_default=self.assets['grid_empty'],
+            grid_obj_hazard=self.assets['grid_lava'],
+            grid_obj_goal=self.assets['grid_goal'],
+            grid_obj_player=self.assets['player'],
+        )
+        self.world = VDict(world_dict)
+        # IMPORTANT - we must add all sub-objects that we want displayed.
+        self.add(self.world)
+        # self.world['player'].grid_pos = self.player_grid_pos
+        # self.add(world_dict['player'], world_dict['grid'])
+        
+        # self.world['player'].tracker_angle = ValueTracker(270)
+        
+        # player_grid_coord = self.pos_to_coord(player_grid_pos) # Must be called after creating the world.
+        # self.tracker_player_grid_coord_x = ValueTracker(player_grid_coord[0]) # X
+        # self.tracker_player_grid_coord_y = ValueTracker(player_grid_coord[1]) # Y
+        # self.tracker_player_grid_coord_z = ValueTracker(player_grid_coord[2]) # Z
+        
+        
+        # self.ref_player_pos = VectorizedPoint(self.world['player'].get_center())
+        
+        # print(f"center={self.world['grid'][int(self.player_grid_pos_var.get_value()[0])*self.grid_size[0] + int(self.player_grid_pos_var.get_value()[1])].get_center()}")
+        
+        # print(f"{self.pos_to_coord((0,1))}, {self.world['grid'][self.pos_to_index((0,1))].get_center()}, {self.coord_to_pos(self.world['grid'][self.pos_to_index((0,1))].get_center())}")
+        # print(f"{self.pos_to_coord((2,3))}, {self.world['grid'][self.pos_to_index((2,3))].get_center()}, {self.coord_to_pos(self.world['grid'][self.pos_to_index((2,3))].get_center())}")
+        
+        # self.world['player'].add_updater(lambda m: m.move_to(np.array([
+        #     self.tracker_player_grid_coord_x.get_value(),
+        #     self.tracker_player_grid_coord_y.get_value(),
+        #     self.tracker_player_grid_coord_z.get_value(),
+        # ])))
+    
+    # def __update_player(self):
+        
+    
+    def pos_to_index(self, pos: tuple[int,int]) -> int:
+        """Converts a 2D position to a 1D index."""
+        return pos[0]*self.grid_size[0] + pos[1]
+    
+    def index_to_pos(self, index: int) -> tuple[int,int]:
+        """Converts a 1D index to a 2D position."""
+        return (index//self.grid_size[0], index%self.grid_size[1])
+
+    def pos_to_coord(self, pos: tuple[int,int]) -> Point3D:
+        """2D grid position to 3D frame coordinate."""
+        return self.world['grid'][self.pos_to_index(pos)].get_center() # 3D frame coordinate of grid element.
+    
+    def coord_to_index(self, coord: Point3D) -> int:
+        """Convert 3D vector coordinate to a 1D grid position index.
+        
+        This snaps the 3D coordinate to a 2D position on the grid based on the element's 1D index within the grid.
+        Gets the closest grid position based on it's center point.
+        """
+        closest_mobject = min(self.world['grid'], key=lambda g: np.linalg.norm(g.get_center() - coord))
+        closest_index = self.world['grid'].submobjects.index(closest_mobject)
+        return closest_index
+
+    def coord_to_pos(self, coord: Point3D) -> tuple[int,int]:
+        """Convert 3D vector coordinate to 2D grid position.
+        
+        This snaps the 3D coordinate to a 2D position on the grid.
+        Gets the closest grid position based on it's center point.
+        """
+        closest_index = self.coord_to_index(coord)
+        return self.index_to_pos(closest_index)
+        
+
+
+    @staticmethod
+    def build_minigrid(
+        grid_size: tuple[int, int],
+        grid_obj_default: Mobject,
+        grid_obj_hazard: Mobject,
+        grid_obj_goal: Mobject,
+        grid_obj_player: Mobject,
+        player_pos: tuple[int, int] | None = None, # Defaults to top-left.
+        goal_pos: tuple[int, int] | None = None, # Defaults to bottom-right.
+        hazards: list[tuple[int, int]] = [],
+        # grid_obj_player: Mobject = obj_player,
+        ) -> dict:
+        """Helper function to generate a MiniGrid environment.
+        
+        Returns a 2D matrix of Manim `VMobject`.
+        """
+        if player_pos == None: # Defaults to top-left.
+            player_pos = (0,0)
+        if goal_pos == None: # Defaults to bottom-right.
+            goal_pos = (grid_size[0]-1, grid_size[1]-1)
+        
+        # Support for negative indexing.
+        if any(i < 0 for i in player_pos):
+            player_pos = tuple(negative_index_rollover(i, size) for i,size in zip(player_pos, grid_size))
+        if any(i < 0 for i in goal_pos):
+            goal_pos = tuple(negative_index_rollover(i, size) for i,size in zip(goal_pos, grid_size))
+        if any(i < 0 for haz in hazards for i in haz):
+            hazards = [tuple(negative_index_rollover(i, size) for i,size in zip(haz, grid_size)) for haz in hazards]
+
+        # Build the grid.
+        rows = []
+        for r in range(grid_size[0]):
+            cols = []
+            for c in range(grid_size[1]):
+                # if (r,c) == player_pos:
+                #     cols.append(grid_obj_player.copy())
+                if (r,c) == goal_pos:
+                    cols.append(grid_obj_goal.copy())
+                elif (r,c) in hazards:
+                    cols.append(grid_obj_hazard.copy())
+                else:
+                    cols.append(grid_obj_default.copy())
+            rows.append(cols)
+        
+        grid = VGroup(*[o for o in itertools.chain(*rows)])
+        grid.arrange_in_grid(rows=grid_size[0], cols=grid_size[1], buff=0)
+        
+        player = grid_obj_player.copy()
+        # player_pos = (0,0)
+        player_target_pos = grid[player_pos[0]*grid_size[0] + player_pos[1]].get_center()
+        player.move_to(player_target_pos)
+        # player.tracker_r.set_value(player_pos[0])
+        # player.tracker_c.set_value(player_pos[1])
+        # world = VDict({
+        #     'player': player,
+        #     'grid': grid,
+        # })
+        # return world
+        return {
+            'player': player,
+            'grid': grid,
+        }
+        
+    
+    # def animate_move_player(self, action: MinigridAction, *args, **kwargs) -> Animation:
+    #     return MiniGridMovePlayer(self, action, *args, **kwargs)
+
+    def move_player_forward(self):
+        """Move player forward in the direction it is facing."""
+        # r,c = self.player_grid_pos
+        # r,c = self.player_grid_pos_var.tracker.get_value()
+        # x = self.tracker_player_grid_coord_x.get_value()
+        # y = self.tracker_player_grid_coord_y.get_value()
+        # z = self.tracker_player_grid_coord_z.get_value()
+        
+        # r, c = self.coord_to_pos(np.array([x, y, z]))
+        # print(f"{(x,y,z)=}, {(r,c)=}")
+        
+        # r, c = self.world['player'].tracker_r.get_value(), self.world['player'].tracker_c.get_value()
+        r, c = self.coord_to_pos(self.world['player'].get_center()) # Converts coordinate to (row,col).
+        r, c = int(r), int(c)
+        # print(f"[start] coord={self.world['player'].get_center()}, {(r,c)=}")
+        # print(f"{(self.world['player'].tracker_r.get_value(),self.world['player'].tracker_c.get_value())=}")
+        # r, c = self.world['player'].grid_pos
+        
+        # r, c = int(self.tracker_player_grid_pos_r.get_value()), int(self.tracker_player_grid_pos_c.get_value())
+        # print(f"[forward:start] player={self.world['player'].get_center()}, {(r,c)}")
+        # player_look_angle = self.world['player'].tracker_angle.get_value()
+        player_look_angle = self.world['player'].get_angle() * (180./PI) # Get look angle in degrees.
+        player_look_angle = int(round(player_look_angle / 90) * 90) # Round to nearest [0, 90, 180, 270, 360].
+        player_look_angle = player_look_angle % 360 # Convert to range [0, 359].
+        if player_look_angle % 360 == 0: # UP
+            r -= 1
+        elif player_look_angle == 90: # LEFT
+            c -= 1
+        elif player_look_angle == 180: # DOWN
+            r += 1
+        elif player_look_angle == 270: # RIGHT
+            c += 1
+        
+        # Only move if does not exceed grid boundary.
+        if (r >= 0 and r < self.grid_size[0]) and (c >= 0 and c < self.grid_size[1]):
+            # # print(f"was={self.player_grid_pos}, now={(r,c)}")
+            # # print(f"was={self.world['player'].get_center()}")
+            # self.player_grid_pos = (r,c)
+            # self.tracker_player_grid_pos_r.set_value(r)
+            # self.tracker_player_grid_pos_c.set_value(c)
+            # self.world['player'].grid_pos = r, c
+            # self.world['player'].tracker_r.set_value(r)
+            # self.world['player'].tracker_c.set_value(c)
+            # print(f"{(self.world['player'].tracker_r.get_value(),self.world['player'].tracker_c.get_value())=}")
+            target_pos = self.world['grid'][r*self.grid_size[0] + c].get_center()
+            # # self.world['player'].shift(shift_direction)
+            # self.world['player'].move_to(target_pos)
+            self.world['player'].move_to(target_pos)
+            # print(f"[forward:end] player={self.world['player'].get_center()}, {(r,c)}")
+            # # self.world['player'].set_angle
+            # # print(f"now={self.world['player'].get_center()}")
+            # print(f"[end] coord={self.world['player'].get_center()}, {(r,c)=}")
+            
+            
+            # self.player_grid_pos_var.tracker.set_value(np.array([r, c]))
+            
+            # target_xyz = self.pos_to_coord((r,c))
+            # self.tracker_player_grid_coord_x.set_value(target_xyz[0])
+            # self.tracker_player_grid_coord_y.set_value(target_xyz[1])
+            # self.tracker_player_grid_coord_z.set_value(target_xyz[2])
+            
+            # print(f"{target_xyz=}, {(r,c)=}")
+            
+        return self
+        
+        # return self.world['player']
+
+    def move_player_left(self):
+        """Move player left."""
+        # player_look_angle = self.world['player'].tracker_angle.get_value()
+        player_look_angle = self.world['player'].get_angle() * (180./PI)
+        print(f"[left:start] {player_look_angle=}")
+        turn_amount = +90
+        new_angle = (player_look_angle + turn_amount)
+        self.player_look_angle = new_angle % 360
+        self.world['player'].rotate(turn_amount*DEGREES)
+        # self.world['player'].tracker_angle.set_value(turn_amount)
+        print(f"[left:end] {self.world['player'].get_angle() * (180./PI)}")
+        return self
+    
+    def move_player_right(self):
+        """Move player right."""
+        # player_look_angle = self.world['player'].tracker_angle.get_value()
+        player_look_angle = self.world['player'].get_angle() * (180./PI)
+        print(f"[right:start] {player_look_angle=}")
+        turn_amount = -90
+        new_angle = (player_look_angle + turn_amount)
+        self.player_look_angle = new_angle % 360
+        self.world['player'].rotate(turn_amount*DEGREES)
+        # self.world['player'].tracker_angle.set_value(turn_amount)
+        print(f"[right:end] {self.world['player'].get_angle() * (180./PI)}")
+        return self
+
+    def move_player(self, action: MinigridAction):
+        """Moves player corresponding to an action, which is one of (LEFT, RIGHT, FORWARD)."""
+        
+        if action == MinigridAction.LEFT:
+            return self.move_player_left()
+        elif action == MinigridAction.RIGHT:
+            return self.move_player_right()
+        elif action == MinigridAction.FORWARD:
+            return self.move_player_forward()
 
 
 class PausableScene(Scene):
@@ -1296,10 +1635,53 @@ class DemoForICAB(PausableScene):
         self.play(
             *[FadeOut(o) for o in mobjects_in_scene]
         )
-    
+
     def section_experiment(self):
         self.next_section('experiment-debug-start', skip_animations=True) # Do not animate anything below this.
+        
+        objs = {}
+        objs['grid-left'] = MiniGrid(
+            grid_size=(5,5),
+            hazards_grid_pos=[
+                (1,1),
+                (1,2),
+                (1,3),
+            ],
+            goal_grid_pos=(-1,-1),
+        ).scale(0.3).shift(LEFT*3)
+        objs['grid-right'] = MiniGrid(
+            grid_size=(5,5),
+            hazards_grid_pos=[
+                (2,2),
+                (2,3),
+                (2,4),
+            ],
+            goal_grid_pos=(-1,-2),
+        ).scale(0.3).shift(RIGHT*3)
+        
+        self.play(Write(objs['grid-left']))
+        self.play(Write(objs['grid-right']))
+        
         self.next_section('experiment-debug-stop', skip_animations=False) # Animate everything after this.
+        
+        # for a in [MinigridAction.FORWARD, MinigridAction.FORWARD, MinigridAction.FORWARD]:
+        # for a in [MinigridAction.FORWARD, MinigridAction.FORWARD, MinigridAction.FORWARD]:
+        #     self.play(ApplyMethod(objs['grid-left'].move_player, a))
+            # print(f"[play:end] player={objs['grid-left'].world['player'].get_center()}, {objs['grid-left'].player_grid_pos}")
+            # self.play(objs['grid-left'].animate.move_player(a))
+        self.play(
+            Succession(
+                ApplyMethod(objs['grid-left'].move_player, a)
+                # objs['grid-left'].animate.move_player(a)
+                # objs['grid-left'].animate.move_player(a)
+                # for a in [MinigridAction.RIGHT, MinigridAction.FORWARD, MinigridAction.FORWARD, MinigridAction.FORWARD]
+                # for a in [MinigridAction.FORWARD, MinigridAction.FORWARD, MinigridAction.FORWARD, MinigridAction.FORWARD]
+                # for a in [MinigridAction.LEFT, MinigridAction.RIGHT]
+                # for a in [MinigridAction.LEFT, MinigridAction.LEFT, MinigridAction.LEFT]
+                # for a in [MinigridAction.FORWARD, MinigridAction.LEFT, MinigridAction.FORWARD, MinigridAction.RIGHT, MinigridAction.FORWARD, MinigridAction.RIGHT, MinigridAction.FORWARD]
+                for a in [MinigridAction.FORWARD, MinigridAction.FORWARD, MinigridAction.RIGHT, MinigridAction.FORWARD, MinigridAction.FORWARD, MinigridAction.LEFT, MinigridAction.FORWARD, MinigridAction.FORWARD]
+            ),
+        )
     
     def section_results(self):
         """Experiement result graph dispaly."""
