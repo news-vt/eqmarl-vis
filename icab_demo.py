@@ -3,6 +3,7 @@ import itertools
 import glob
 import json
 import os
+import random
 import pandas as pd
 from pathlib import Path
 import tempfile
@@ -151,7 +152,22 @@ class MinigridAction(IntEnum):
     LEFT = 0
     RIGHT = 1
     FORWARD = 2
+
+def minigrid_path_str_to_list(s: str) -> list[MinigridAction]:
+    """Converts a string of MiniGrid action codes to a list of action objects.
     
+    Supported action codes are: ['l', 'r', 'f'] (uppercase also allowed)
+    """
+    assert all(a in ['l', 'r', 'f'] for a in s.lower()), "Only actions supported are ['l', 'r', 'f'] (uppercase also allowed)"
+    path = []
+    for a in s.lower():
+        if a == 'l':
+            path.append(MinigridAction.LEFT)
+        elif a == 'r':
+            path.append(MinigridAction.RIGHT)
+        elif a == 'f':
+            path.append(MinigridAction.FORWARD)
+    return path
 
 # class MiniGridPlayer(VGroup):
 class RotationTrackableVGroup(VGroup):
@@ -1669,19 +1685,43 @@ class DemoForICAB(PausableScene):
         #     self.play(ApplyMethod(objs['grid-left'].move_player, a))
             # print(f"[play:end] player={objs['grid-left'].world['player'].get_center()}, {objs['grid-left'].player_grid_pos}")
             # self.play(objs['grid-left'].animate.move_player(a))
+        # self.play(
+        #     Succession(
+        #         ApplyMethod(objs['grid-left'].move_player, a)
+        #         # objs['grid-left'].animate.move_player(a)
+        #         # objs['grid-left'].animate.move_player(a)
+        #         # for a in [MinigridAction.RIGHT, MinigridAction.FORWARD, MinigridAction.FORWARD, MinigridAction.FORWARD]
+        #         # for a in [MinigridAction.FORWARD, MinigridAction.FORWARD, MinigridAction.FORWARD, MinigridAction.FORWARD]
+        #         # for a in [MinigridAction.LEFT, MinigridAction.RIGHT]
+        #         # for a in [MinigridAction.LEFT, MinigridAction.LEFT, MinigridAction.LEFT]
+        #         # for a in [MinigridAction.FORWARD, MinigridAction.LEFT, MinigridAction.FORWARD, MinigridAction.RIGHT, MinigridAction.FORWARD, MinigridAction.RIGHT, MinigridAction.FORWARD]
+        #         for a in [MinigridAction.FORWARD, MinigridAction.FORWARD, MinigridAction.RIGHT, MinigridAction.FORWARD, MinigridAction.FORWARD, MinigridAction.LEFT, MinigridAction.FORWARD, MinigridAction.FORWARD]
+        #     ),
+        # )
+        #################
+        # self.play(objs['grid-left'].animate.move_player(MinigridAction.FORWARD))
+        # self.play(objs['grid-left'].animate.move_player(MinigridAction.RIGHT))
+        # self.play(objs['grid-left'].animate.move_player(MinigridAction.FORWARD))
+        # self.play(objs['grid-left'].animate.move_player(MinigridAction.LEFT))
+        # self.play(objs['grid-left'].animate.move_player(MinigridAction.FORWARD))
+        # self.play(objs['grid-left'].animate.move_player(MinigridAction.FORWARD))
+        ################
         self.play(
             Succession(
                 ApplyMethod(objs['grid-left'].move_player, a)
-                # objs['grid-left'].animate.move_player(a)
-                # objs['grid-left'].animate.move_player(a)
-                # for a in [MinigridAction.RIGHT, MinigridAction.FORWARD, MinigridAction.FORWARD, MinigridAction.FORWARD]
-                # for a in [MinigridAction.FORWARD, MinigridAction.FORWARD, MinigridAction.FORWARD, MinigridAction.FORWARD]
-                # for a in [MinigridAction.LEFT, MinigridAction.RIGHT]
-                # for a in [MinigridAction.LEFT, MinigridAction.LEFT, MinigridAction.LEFT]
-                # for a in [MinigridAction.FORWARD, MinigridAction.LEFT, MinigridAction.FORWARD, MinigridAction.RIGHT, MinigridAction.FORWARD, MinigridAction.RIGHT, MinigridAction.FORWARD]
-                for a in [MinigridAction.FORWARD, MinigridAction.FORWARD, MinigridAction.RIGHT, MinigridAction.FORWARD, MinigridAction.FORWARD, MinigridAction.LEFT, MinigridAction.FORWARD, MinigridAction.FORWARD]
+                # for a in [MinigridAction.FORWARD, MinigridAction.FORWARD, MinigridAction.RIGHT, MinigridAction.FORWARD, MinigridAction.FORWARD, MinigridAction.LEFT, MinigridAction.FORWARD, MinigridAction.FORWARD]
+                # for a in minigrid_path_str_to_list('ffrfflff')
+                for a in [random.choice(list(MinigridAction)) for i in range(100)]
             ),
+            Succession(
+                ApplyMethod(objs['grid-right'].move_player, a)
+                # for a in [MinigridAction.RIGHT, MinigridAction.FORWARD, MinigridAction.RIGHT, MinigridAction.FORWARD, MinigridAction.FORWARD, MinigridAction.LEFT, MinigridAction.FORWARD, MinigridAction.LEFT]
+                # for a in minigrid_path_str_to_list('rfrfflfl')
+                for a in [random.choice(list(MinigridAction)) for i in range(100)]
+            ),
+            run_time=4,
         )
+        
     
     def section_results(self):
         """Experiement result graph dispaly."""
