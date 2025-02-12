@@ -513,7 +513,7 @@ class DemoForICAB(PausableScene):
             (self.section_experiment, dict(name="Experiment", skip_animations=False)),
             # (self.section_results, dict(name="Results", skip_animations=False)),
             (self.section_outro, dict(name="Outro", skip_animations=False)), # Play last.
-            (self.section_placeholder, dict(name="Placeholder", skip_animations=False)),
+            # (self.section_placeholder, dict(name="Placeholder", skip_animations=False)),
         ]
         for method, section_kwargs in sections:
             self.next_section(**section_kwargs)
@@ -569,8 +569,11 @@ class DemoForICAB(PausableScene):
         
         # Animate the title.
         self.play(FadeIn(eqmarl_acronym))
+        self.small_pause()
         self.play(Write(eqmarl_full))
+        self.small_pause()
         self.play(Write(subtitle_text))
+        self.small_pause()
         
         # self.play(Create(self.attribution_text))
         self.play(Write(attribution_text_full))
@@ -1553,7 +1556,7 @@ class DemoForICAB(PausableScene):
             Write(arrows['env-right-down']),
         )
         self.play(Write(texts['ideal-1']), Write(arrows['ideal-com-lr']))
-        self.play(Write(texts['ideal-2']), Write(arrows['ideal-com-rl']))
+        self.play(FadeIn(texts['ideal-2']), Write(arrows['ideal-com-rl']))
         self.medium_pause()
         self.play(FadeOut(texts['ideal-0']), FadeOut(texts['ideal-1']), FadeOut(arrows['ideal-com-lr']), FadeOut(texts['ideal-2']), FadeOut(arrows['ideal-com-rl']))
         
@@ -2293,12 +2296,12 @@ class DemoForICAB(PausableScene):
         # objs['text-exp-21'] = MarkupText("via coupled experiences", font_size=32).next_to(objs['text-exp-20'], DOWN)
         # objs['text-exp-21'] = MarkupText("agents learn to collaborate", font_size=32).next_to(objs['text-exp-20'], DOWN)
         
-        objs['text-exp-19'] = MarkupText("The key takeaways are:", font_size=32).to_edge(UP, buff=2)
+        objs['text-exp-19'] = MarkupText("The key takeaways are:", font_size=36).to_edge(UP, buff=2)
         objs['text-exp-20'] = IconList(
             *[
                 MarkupText("Quantum entangled learning can <b>improve performance</b> and <b>couple agent behavior</b>", font_size=28),
-                MarkupText("eQMARL <b>eliminates experience sharing</b>", font_size=28),
-                MarkupText("eQMARL can be deployed to <b>learn a diverse environments</b>", font_size=28),
+                MarkupText(f"e<span fgcolor=\"{self.colors['quantum'].to_hex()}\">Q</span>MARL <b>eliminates experience sharing</b>", font_size=28),
+                MarkupText(f"e<span fgcolor=\"{self.colors['quantum'].to_hex()}\">Q</span>MARL can be deployed to <b>learn diverse environments</b>", font_size=28),
             ],
             icon=Star(color=YELLOW, fill_opacity=0.5).scale(0.3),
             buff=(.2, .5),
@@ -2604,9 +2607,9 @@ class DemoForICAB(PausableScene):
         t1 = Text("Alexander DeRieux & Walid Saad (2025)", font_size=24).next_to(t0, DOWN)
         self.play(ReplacementTransform(self.attribution_text, t1))
         
-        self.play(Wiggle(img))
+        # self.play(Wiggle(img))
         
-        self.wait(1)
+        self.long_pause()
         
 
 
