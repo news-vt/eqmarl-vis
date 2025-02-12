@@ -7,7 +7,7 @@ import random
 import pandas as pd
 from pathlib import Path
 import tempfile
-from typing import Any, Callable
+from typing import Any, Callable, Iterable
 
 from manim import *
 from manim.typing import *
@@ -19,6 +19,21 @@ import segno
 # Tool for creating voiceovers with Manim: https://www.manim.community/plugin/manim-voiceover/
 
 # Example of making a neural network with Manim: https://medium.com/@andresberejnoi/using-manim-and-python-to-create-animations-like-3blue1brown-andres-berejnoi-34f755606761
+
+class CustomSuccession(Succession):
+    
+    def _setup_scene(self, scene) -> None:
+        if scene is None:
+            return
+        if self.is_introducer():
+            for anim in self.animations:
+                if not anim.is_introducer() and anim.mobject is not None:
+                    print(f"adding: {anim}")
+                    scene.add(anim.mobject)
+
+        self.scene = scene
+
+
 
 class IconList(VGroup):
     def __init__(self, *items: VMobject, icon: VMobject, **kwargs):
@@ -352,11 +367,20 @@ class MiniGrid(Group):
         return self.pos_to_coord(self.goal_pos)
     
     def get_goal_pos(self) -> tuple[int, int]:
-        """Get goal position as 2D grid coordinate (row, col)."""
+        """Get goal position as 2D grid position (row, col)."""
         return self.goal_pos
 
     def get_goal(self) -> Mobject:
+        """Get goal MObject."""
         return self.world['grid'][self.pos_to_index(self.get_goal_pos())]
+    
+    def get_grid_at_pos(self, pos: tuple[int,int]) -> Mobject:
+        """Get grid MObject at 2D grid position (row, col)."""
+        return self.world['grid'][self.pos_to_index(pos)]
+    
+    def get_hazards_pos(self) -> list[tuple[int,int]]:
+        """Get list of hazard grid positions (row, col)."""
+        return self.hazards_grid_pos
 
     @staticmethod
     def build_minigrid(
@@ -467,22 +491,67 @@ class MiniGrid(Group):
             return self.move_player_right()
         elif action == MinigridAction.FORWARD:
             return self.move_player_forward()
+    
+    @staticmethod
+    def event_collision_hazard(grid: 'MiniGrid', shadow: 'MiniGrid', player_pos: tuple[int,int]) -> AnimationGroup:
+        hazard = shadow.get_grid_at_pos(player_pos)
+        return AnimationGroup(
+            # Wiggle(grid.get_grid_at_pos(player_pos)),
+            # Wiggle(grid.get_player()),
+            CustomFlash(shadow.pos_to_coord(player_pos), flash_radius=hazard.width*.75, color=hazard.get_color()),
+        )
+    
+    @staticmethod
+    def event_collision_goal(grid: 'MiniGrid', shadow: 'MiniGrid', player_pos: tuple[int,int]) -> AnimationGroup:
+        goal = shadow.get_goal()
+        return AnimationGroup(
+            # Wiggle(grid.get_grid_at_pos(player_pos)),
+            # Wiggle(grid.get_player()),
+            CustomFlash(shadow.pos_to_coord(player_pos), flash_radius=goal.width*.75, color=goal.get_color()),
+        )
+    
+    def animate_actions(self,
+        *actions: MinigridAction,
+        func_event_collision_hazard = event_collision_hazard,
+        func_event_collision_goal = event_collision_goal,
+        **kwargs,
+        ) -> Succession:
+        """Animates a path of actions within the grid.
+        """
+        minigrid_shadow = self.copy() # Create a shadow of the grid to track positions across animations.
+        anims = []
+        for a in actions:
+            anims.append(
+                ApplyMethod(self.move_player, a)
+            )
+            minigrid_shadow.move_player(a) # Move the shadow too.
+            player_pos = minigrid_shadow.get_player_pos()
+            if player_pos in minigrid_shadow.get_hazards_pos():
+                anim = func_event_collision_hazard(self, minigrid_shadow, player_pos)
+                if anim is not None:
+                    anims.append(anim)
+            elif player_pos == minigrid_shadow.get_goal_pos():
+                anim = func_event_collision_goal(self, minigrid_shadow, player_pos)
+                if anim is not None:
+                    anims.append(anim)
+        del minigrid_shadow # Remove the shadow.
+        return Succession(*anims, **kwargs)
 
 
 class PausableScene(Scene):
     """Base scene that allows for easy pausing."""
     
-    def small_pause(self, n=0.5):
-        self.wait(n)
+    def small_pause(self, duration=0.5, **kwargs):
+        self.wait(duration, **kwargs)
     
-    def pause_pause(self, n=1.5):
-        self.wait(n)
+    def pause_pause(self, duration=1.5, **kwargs):
+        self.wait(duration, **kwargs)
 
-    def medium_pause(self, n=3):
-        self.wait(n)
+    def medium_pause(self, duration=3, **kwargs):
+        self.wait(duration, **kwargs)
     
-    def long_pause(self, n=5):
-        self.wait(n)
+    def long_pause(self, duration=5, **kwargs):
+        self.wait(duration, **kwargs)
 
 
 class DemoForICAB(PausableScene):
@@ -506,13 +575,15 @@ class DemoForICAB(PausableScene):
         # Each section should cleanup any objects after itself if they are not to be used again.
         # Sections can be tested individually, to do this set `skip_animations=True` to turn off all other sections not used (note that the section will still be generated, allowing objects to move to their final position for use with future sections in the pipeline).
         sections: list[tuple[Callable, dict]] = [
-            (self.section_title, dict(name="Title", skip_animations=False)),
-            # (self.section_motivation, dict(name="Motivation", skip_animations=False)),
-            # (self.section_scenario_old, dict(name="Scenario-OLD", skip_animations=True)),
+            (self.section_title, dict(name="Title", skip_animations=False)), # First.
             (self.section_scenario, dict(name="Scenario", skip_animations=False)),
             (self.section_experiment, dict(name="Experiment", skip_animations=False)),
+            (self.section_summary, dict(name="Summary", skip_animations=False)),
+            (self.section_outro, dict(name="Outro", skip_animations=False)), # Last.
+            ######### TRASH.
+            # (self.section_motivation, dict(name="Motivation", skip_animations=False)),
+            # (self.section_scenario_old, dict(name="Scenario-OLD", skip_animations=True)),
             # (self.section_results, dict(name="Results", skip_animations=False)),
-            (self.section_outro, dict(name="Outro", skip_animations=False)), # Play last.
             # (self.section_placeholder, dict(name="Placeholder", skip_animations=False)),
         ]
         for method, section_kwargs in sections:
@@ -555,11 +626,11 @@ class DemoForICAB(PausableScene):
         ]
         eqmarl_full.next_to(eqmarl_acronym, DOWN, buff=0.5)
         
-        subtitle_text = Text("Coordination without Communication", font_size=28)
-        subtitle_text.next_to(eqmarl_full, DOWN, buff=0.5)
+        self.subtitle_text = Text("Coordination without Communication", font_size=28)
+        self.subtitle_text.next_to(eqmarl_full, DOWN, buff=0.5)
         
-        attribution_text_full = Text("Alexander DeRieux & Walid Saad (2025)", font_size=24)
-        attribution_text_full.next_to(subtitle_text, DOWN, buff=0.5)
+        self.attribution_text_full = Text("Alexander DeRieux & Walid Saad (2025)", font_size=24)
+        self.attribution_text_full.next_to(self.subtitle_text, DOWN, buff=0.5)
         
         self.attribution_text = Text("A. DeRieux & W. Saad (2025)", font_size=12)
         self.attribution_text.to_edge(DOWN, buff=0.1)
@@ -569,18 +640,18 @@ class DemoForICAB(PausableScene):
         
         # Animate the title.
         self.play(FadeIn(eqmarl_acronym))
-        self.small_pause()
+        self.small_pause(frozen_frame=False)
         self.play(Write(eqmarl_full))
-        self.small_pause()
-        self.play(Write(subtitle_text))
-        self.small_pause()
+        self.small_pause(frozen_frame=False)
+        self.play(Write(self.subtitle_text))
+        self.small_pause(frozen_frame=False)
         
         # self.play(Create(self.attribution_text))
-        self.play(Write(attribution_text_full))
+        self.play(Write(self.attribution_text_full))
         
-        self.medium_pause()
+        self.medium_pause(frozen_frame=False)
         
-        self.play(FadeOut(eqmarl_full), FadeOut(subtitle_text), eqmarl_acronym.animate.scale(0.5).to_edge(UL), ReplacementTransform(attribution_text_full, self.attribution_text))
+        self.play(FadeOut(eqmarl_full), FadeOut(self.subtitle_text), eqmarl_acronym.animate.scale(0.5).to_edge(UL), ReplacementTransform(self.attribution_text_full, self.attribution_text))
 
     def section_motivation(self):
         """Motivation section."""
@@ -1388,17 +1459,17 @@ class DemoForICAB(PausableScene):
             direction=DOWN,
         ).to_edge(DOWN)
         objs['nocom-left'] = MObjectWithLabel(
-            obj=ImageMobject("assets/images/no-speak.png").scale(0.15),
+            obj=ImageMobject("assets/images/no-speak.png").scale(0.15).next_to(objs['drone-left'].obj, RIGHT*8),
             label=Text("Blocked P2P", font_size=18),
             buff=0.1,
             direction=UP,
-        ).next_to(objs['drone-left'].obj, RIGHT*8)
+        ) #.next_to(objs['drone-left'].obj, RIGHT*8)
         objs['nocom-right'] = MObjectWithLabel(
-            obj=ImageMobject("assets/images/no-speak.png").scale(0.15),
+            obj=ImageMobject("assets/images/no-speak.png").scale(0.15).next_to(objs['drone-right'].obj, LEFT*8),
             label=Text("Blocked P2P", font_size=18),
             buff=0.1,
             direction=UP,
-        ).next_to(objs['drone-right'].obj, LEFT*8)
+        ) #.next_to(objs['drone-right'].obj, LEFT*8)
         # Qubits.
         objs['qubit-left'] = MObjectWithLabel(
             obj=Qubit(has_text=False, circle_color=self.colors['quantum'], ellipse_color=self.colors['quantum']).scale(0.25),
@@ -1524,7 +1595,7 @@ class DemoForICAB(PausableScene):
         # Text objects.
         texts = {}
         texts['imagine-0'] = Text("Imagine two separate environments", font_size=32).to_edge(UP, buff=1)
-        texts['imagine-1'] = Text("and two AI drones", font_size=32).to_edge(UP, buff=1)
+        texts['imagine-1'] = Text("and two AI-powered drones", font_size=32).to_edge(UP, buff=1)
         texts['ideal-0'] = MarkupText(f"In an <u>ideal</u> scenario", font_size=32).to_edge(UP, buff=1)
         texts['ideal-1'] = Text("The drones could learn", font_size=24).next_to(arrows['ideal-com-lr'], UP)
         texts['ideal-2'] = MarkupText(f"by directly sharing their <span fgcolor=\"{self.colors['observation'].to_hex()}\">experiences</span>", font_size=24).next_to(arrows['ideal-com-rl'], DOWN)
@@ -1532,10 +1603,10 @@ class DemoForICAB(PausableScene):
         texts['nocom-1'] = MarkupText(f"this sharing of <span fgcolor=\"{self.colors['observation'].to_hex()}\">local information</span> is <span fgcolor=\"{self.colors['no'].to_hex()}\">not possible</span>", font_size=32).next_to(texts['nocom-0'], DOWN) # to_edge(UP, buff=2) # Below above.
         texts['quantum-0'] = Text("However...", font_size=32).to_edge(UP, buff=1)
         texts['quantum-1'] = MarkupText(f"using <span fgcolor=\"{self.colors['quantum'].to_hex()}\">Quantum Entanglement</span>", font_size=32).to_edge(UP, buff=1) # .next_to(texts['quantum-0'], RIGHT)
-        texts['quantum-2'] = Text("between the agents", font_size=32).next_to(texts['quantum-1'], DOWN)
-        texts['quantum-3'] = MarkupText(f"The drones can use their local <span fgcolor=\"{self.colors['observation'].to_hex()}\">experiences</span>", font_size=32).to_edge(UP, buff=1)
+        texts['quantum-2'] = Text("between the drones", font_size=32).next_to(texts['quantum-1'], DOWN)
+        texts['quantum-3'] = MarkupText(f"The drones can use their <span fgcolor=\"{self.colors['observation'].to_hex()}\">local experiences</span>", font_size=32).to_edge(UP, buff=1)
         texts['quantum-4'] = MarkupText(f"to influence the <span fgcolor=\"{self.colors['action'].to_hex()}\">actions</span> of others", font_size=32).next_to(texts['quantum-3'], DOWN)
-        texts['quantum-5'] = MarkupText(f"without <span fgcolor=\"{self.colors['no'].to_hex()}\">direct communication</span>", font_size=32).next_to(texts['quantum-4'], DOWN)
+        texts['quantum-5'] = MarkupText(f"without <b><span fgcolor=\"{self.colors['no'].to_hex()}\">direct communication</span></b>", font_size=32).next_to(texts['quantum-4'], DOWN)
         texts['quantum-6'] = MarkupText(f"<span fgcolor=\"{self.colors['quantum'].to_hex()}\">Quantum Entangled Learning</span>", font_size=32).to_edge(UP, buff=1)
         texts['quantum-7'] = MarkupText(f"<span fgcolor=\"{self.colors['action'].to_hex()}\">Coordination</span> <u>without</u> <span fgcolor=\"{RED.to_hex()}\">Communication</span>", font_size=28).next_to(texts['quantum-6'], DOWN)
         
@@ -1557,7 +1628,7 @@ class DemoForICAB(PausableScene):
         )
         self.play(Write(texts['ideal-1']), Write(arrows['ideal-com-lr']))
         self.play(FadeIn(texts['ideal-2']), Write(arrows['ideal-com-rl']))
-        self.medium_pause()
+        self.medium_pause(frozen_frame=False)
         self.play(FadeOut(texts['ideal-0']), FadeOut(texts['ideal-1']), FadeOut(arrows['ideal-com-lr']), FadeOut(texts['ideal-2']), FadeOut(arrows['ideal-com-rl']))
         
         # No communication.
@@ -1572,7 +1643,7 @@ class DemoForICAB(PausableScene):
             Write(arrows['no-com-lr']),
             Write(arrows['no-com-rl']),
         )
-        self.medium_pause()
+        self.medium_pause(frozen_frame=False)
         self.play(
             FadeOut(texts['nocom-0']),
             FadeOut(texts['nocom-1']),
@@ -1587,7 +1658,7 @@ class DemoForICAB(PausableScene):
             FadeOut(arrows['env-right-up']),
             FadeOut(arrows['env-right-down']),
         )
-        self.small_pause()
+        self.small_pause(frozen_frame=False)
         
         # Quantum.
         self.play(Write(texts['quantum-0']))
@@ -1596,6 +1667,7 @@ class DemoForICAB(PausableScene):
         self.play(FadeIn(objs['qubit-left']), FadeIn(objs['qubit-right']))
         self.play(Write(waves['ent-0']))
         objs['obstacle'].set_z_index(1) # On top.
+        self.small_pause(frozen_frame=False)
         self.play(
             Write(texts['quantum-2']),
             trackers['amp-0'].animate.set_value(.2),
@@ -1614,7 +1686,7 @@ class DemoForICAB(PausableScene):
             Write(arrows['env-right-down']),
         )
         self.play(Write(texts['quantum-5']))
-        self.medium_pause()
+        self.medium_pause(frozen_frame=False)
         
         # Lasting point before section change.
         self.play(ReplacementTransform(VGroup(texts['quantum-3'], texts['quantum-4'], texts['quantum-5']), texts['quantum-6']))
@@ -1626,6 +1698,7 @@ class DemoForICAB(PausableScene):
             rate_func=linear,
         )
         self.play(arrows['env-right-down'].obj.animate.set_color(YELLOW).set_stroke(width=12, opacity=0.5), rate_func=there_and_back)
+        self.medium_pause(frozen_frame=False)
 
         # Clear the screen of all objects created in this section.
         mobjects_in_scene = list(set(self.mobjects) - set([self.eqmarl_acronym, self.attribution_text]))
@@ -1639,7 +1712,7 @@ class DemoForICAB(PausableScene):
         objs = {}
         
         # Text objects.
-        objs['text-exp-0'] = Text("Let's see an example", font_size=32)
+        objs['text-exp-0'] = Text("Let's see an illustrative example", font_size=32)
         objs['text-exp-1'] = Tex(r"This is an $5\times5$ grid environment for 1 player", font_size=32).to_edge(UP, buff=1.5)
         objs['text-exp-2'] = Tex(r"The player can take actions $a \in \{\textrm{left}, \textrm{right}, \textrm{forward}\}$ to move in the grid", font_size=32).to_edge(UP, buff=1.5)
         objs['text-exp-3'] = Text("As the player moves it gathers experiences", font_size=32).to_edge(UP, buff=1.5)
@@ -1835,34 +1908,37 @@ class DemoForICAB(PausableScene):
         
         self.play(ReplacementTransform(objs['text-exp-1'], objs['text-exp-2'])) # Player actions.
         self.play(
-            Succession(
-                ApplyMethod(objs['grid-big-center'].move_player, a)
-                for a in minigrid_path_str_to_list('fff')
-            ),
+            # Succession(
+            #     ApplyMethod(objs['grid-big-center'].move_player, a)
+            #     for a in minigrid_path_str_to_list('fff')
+            # ),
+            objs['grid-big-center'].animate_actions(*minigrid_path_str_to_list('fff')),
             run_time=2,
         )
         self.play(ReplacementTransform(objs['text-exp-2'], objs['text-exp-3'])) # Gains experiences.
         self.play(
-            Succession(
-                ApplyMethod(objs['grid-big-center'].move_player, a)
-                for a in minigrid_path_str_to_list('frf')
-                # for a in minigrid_path_str_to_list('ffffrffff')
-            ),
+            # Succession(
+            #     ApplyMethod(objs['grid-big-center'].move_player, a)
+            #     for a in minigrid_path_str_to_list('frf')
+            #     # for a in minigrid_path_str_to_list('ffffrffff')
+            # ),
+            objs['grid-big-center'].animate_actions(*minigrid_path_str_to_list('frf')),
             run_time=2,
         )
         self.play(ReplacementTransform(objs['text-exp-3'], objs['text-exp-4'])) # To find the goal.
         self.play(
-            Succession(
-                ApplyMethod(objs['grid-big-center'].move_player, a)
-                for a in minigrid_path_str_to_list('fff')
-                # for a in minigrid_path_str_to_list('ffffrffff')
-            ),
+            # Succession(
+            #     ApplyMethod(objs['grid-big-center'].move_player, a)
+            #     for a in minigrid_path_str_to_list('fff')
+            #     # for a in minigrid_path_str_to_list('ffffrffff')
+            # ),
+            objs['grid-big-center'].animate_actions(*minigrid_path_str_to_list('fff')),
             run_time=2,
         )
-        self.play(
-            Flash(objs['grid-big-center'].get_goal_coord(), flash_radius=objs['grid-big-center'].get_goal().width*.75, color=GREEN),
-            rate_func=linear,
-        )
+        # self.play(
+        #     Flash(objs['grid-big-center'].get_goal_coord(), flash_radius=objs['grid-big-center'].get_goal().width*.75, color=GREEN),
+        #     rate_func=linear,
+        # )
         self.play(FadeOut(objs['grid-big-legend']))
         self.play(FadeOut(objs['text-exp-4']))
         self.play(FadeOut(objs['grid-big-center']))
@@ -1877,26 +1953,30 @@ class DemoForICAB(PausableScene):
         )
         self.play(ReplacementTransform(objs['text-exp-5'], objs['text-exp-6'])) # Cannot communicate.
         self.play(
-            Succession(
-                ApplyMethod(objs['grid-big-left'].obj.move_player, a)
-                for a in minigrid_path_str_to_list('fff')
-            ),
-            Succession(
-                ApplyMethod(objs['grid-big-right'].obj.move_player, a)
-                for a in minigrid_path_str_to_list('rfff')
-            ),
+            # Succession(
+            #     ApplyMethod(objs['grid-big-left'].obj.move_player, a)
+            #     for a in minigrid_path_str_to_list('fff')
+            # ),
+            # Succession(
+            #     ApplyMethod(objs['grid-big-right'].obj.move_player, a)
+            #     for a in minigrid_path_str_to_list('rfff')
+            # ),
+            objs['grid-big-left'].obj.animate_actions(*minigrid_path_str_to_list('fff')),
+            objs['grid-big-right'].obj.animate_actions(*minigrid_path_str_to_list('rfff')),
             run_time=2,
         )
         self.play(ReplacementTransform(objs['text-exp-6'], objs['text-exp-7'])) # Cannot coordinate.
         self.play(
-            Succession(
-                ApplyMethod(objs['grid-big-left'].obj.move_player, a)
-                for a in minigrid_path_str_to_list('rfff')
-            ),
-            Succession(
-                ApplyMethod(objs['grid-big-right'].obj.move_player, a)
-                for a in minigrid_path_str_to_list('flfff')
-            ),
+            # Succession(
+            #     ApplyMethod(objs['grid-big-left'].obj.move_player, a)
+            #     for a in minigrid_path_str_to_list('rfff')
+            # ),
+            # Succession(
+            #     ApplyMethod(objs['grid-big-right'].obj.move_player, a)
+            #     for a in minigrid_path_str_to_list('flfff')
+            # ),
+            objs['grid-big-left'].obj.animate_actions(*minigrid_path_str_to_list('rfff')),
+            objs['grid-big-right'].obj.animate_actions(*minigrid_path_str_to_list('flfff')),
             run_time=2,
         )
         
@@ -1916,33 +1996,37 @@ class DemoForICAB(PausableScene):
         )
         self.play(Write(objs['text-exp-9']))
         self.play(
-            Succession(
-                ApplyMethod(objs['grid-small-left'].obj.move_player, a)
-                for a in minigrid_path_str_to_list('rffl')
-            ),
-            Succession(
-                ApplyMethod(objs['grid-small-right'].obj.move_player, a)
-                for a in minigrid_path_str_to_list('ffr')
-            ),
+            # Succession(
+            #     ApplyMethod(objs['grid-small-left'].obj.move_player, a)
+            #     for a in minigrid_path_str_to_list('rffl')
+            # ),
+            # Succession(
+            #     ApplyMethod(objs['grid-small-right'].obj.move_player, a)
+            #     for a in minigrid_path_str_to_list('ffr')
+            # ),
+            objs['grid-small-left'].obj.animate_actions(*minigrid_path_str_to_list('rffl')),
+            objs['grid-small-right'].obj.animate_actions(*minigrid_path_str_to_list('ffr')),
             run_time=2,
         )
         self.play(Write(objs['text-exp-10']))
         self.play(
-            Succession(
-                ApplyMethod(objs['grid-small-left'].obj.move_player, a)
-                for a in minigrid_path_str_to_list('ffffrff')
-            ),
-            Succession(
-                ApplyMethod(objs['grid-small-right'].obj.move_player, a)
-                for a in minigrid_path_str_to_list('fffflff')
-            ),
+            # Succession(
+            #     ApplyMethod(objs['grid-small-left'].obj.move_player, a)
+            #     for a in minigrid_path_str_to_list('ffffrff')
+            # ),
+            # Succession(
+            #     ApplyMethod(objs['grid-small-right'].obj.move_player, a)
+            #     for a in minigrid_path_str_to_list('fffflff')
+            # ),
+            objs['grid-small-left'].obj.animate_actions(*minigrid_path_str_to_list('ffffrff')),
+            objs['grid-small-right'].obj.animate_actions(*minigrid_path_str_to_list('fffflff')),
             run_time=2,
         )
-        self.play(
-            Flash(objs['grid-small-left'].obj.get_goal_coord(), flash_radius=objs['grid-small-left'].obj.get_goal().width*.75, color=GREEN),
-            Flash(objs['grid-small-right'].obj.get_goal_coord(), flash_radius=objs['grid-small-right'].obj.get_goal().width*.75, color=GREEN),
-            rate_func=linear,
-        )
+        # self.play(
+        #     Flash(objs['grid-small-left'].obj.get_goal_coord(), flash_radius=objs['grid-small-left'].obj.get_goal().width*.75, color=GREEN),
+        #     Flash(objs['grid-small-right'].obj.get_goal_coord(), flash_radius=objs['grid-small-right'].obj.get_goal().width*.75, color=GREEN),
+        #     rate_func=linear,
+        # )
         
         
         
@@ -1981,28 +2065,31 @@ class DemoForICAB(PausableScene):
         # Data to display.
         series: list[dict] = [
             dict(
-                key='$\\mathtt{fCTDE}$',
+                key='fctde',
+                label='No Quantum',
                 blob='experiment_output/coingame_maa2c_mdp_fctde/20240501T185443/metrics-[0-9].json',
                 # color=[0.8666666666666667,0.5176470588235295,0.3215686274509804],
                 color=ORANGE.to_rgb(),
                 zorder=1,
             ),
             dict(
-                key='$\\mathtt{qfCTDE}$',
+                key='qfctde',
+                label='No Entanglement',
                 blob='experiment_output/coingame_maa2c_mdp_qfctde/20240503T151226/metrics-[0-9].json',
                 # color=[0.8549019607843137, 0.5450980392156862, 0.7647058823529411],
                 color=PINK.to_rgb(),
                 zorder=2,
             ),
+            # dict(
+            #     key='sctde',
+            #     blob='experiment_output/coingame_maa2c_mdp_sctde/20240418T133421/metrics-[0-9].json',
+            #     # color=[0.3333333333333333,0.6588235294117647,0.40784313725490196],
+            #     color=GREEN.to_rgb(),
+            #     zorder=3,
+            # ),
             dict(
-                key='$\\mathtt{sCTDE}$',
-                blob='experiment_output/coingame_maa2c_mdp_sctde/20240418T133421/metrics-[0-9].json',
-                # color=[0.3333333333333333,0.6588235294117647,0.40784313725490196],
-                color=GREEN.to_rgb(),
-                zorder=3,
-            ),
-            dict(
-                key='$\\mathtt{eQMARL-}\Psi^{+}$',
+                key='eqmarl-psi+',
+                label='Proposed eQMARL',
                 blob='experiment_output/coingame_maa2c_mdp_eqmarl_psi+/20240501T152929/metrics-[0-9].json',
                 # color=[0.2980392156862745,0.4470588235294118,0.6901960784313725],
                 color=BLUE.to_rgb(),
@@ -2055,7 +2142,7 @@ class DemoForICAB(PausableScene):
         
         # Create labels for axis.
         labels = ax.get_axis_labels(
-            x_label=Text('Epoch', font_size=24),
+            x_label=Text('Time', font_size=24),
             y_label=Text('Score', font_size=24),
         )
         tracker_x_value = ValueTracker(x_range[0]) # For animating x-axis.
@@ -2166,7 +2253,7 @@ class DemoForICAB(PausableScene):
             # Preserve legend elements for current series.
             group_graphs['legend'][series_kwargs['key']] = VDict({
                 'glyph': Line(color=ManimColor.from_rgb(series_kwargs['color'])),
-                'label': Tex(series_kwargs['key'], font_size=18),
+                'label': Tex(series_kwargs['label'], font_size=18),
             })
 
         # Set the legend positioning.
@@ -2182,13 +2269,13 @@ class DemoForICAB(PausableScene):
 
         # Animate the axis, axis-labels, and the legend-box.
         gap_center = objs['group-grid-small-up/down'].get_right() + np.array([gap_width/2., 0, 0]) # Shift X direction.
-        objs['text-exp-11'] = Text("We ran several experiments", font_size=32).move_to(gap_center).shift(UP*2)
+        objs['text-exp-11'] = Text("We ran several similar experiments", font_size=32).move_to(gap_center).shift(UP*2)
         objs['text-exp-12'] = Text("to demonstrate the effectiveness of eQMARL", font_size=32).next_to(objs['text-exp-11'], DOWN)
         objs['text-exp-13'] = Text("These are our results...", font_size=32).next_to(objs['text-exp-12'], DOWN*2)
         self.play(Write(objs['text-exp-11']))
         self.play(Write(objs['text-exp-12']))
         self.play(Write(objs['text-exp-13']))
-        self.small_pause()
+        self.small_pause(frozen_frame=False)
         self.play(
             ReplacementTransform(Group(objs['text-exp-11'], objs['text-exp-12'], objs['text-exp-13']), group_graphs['ax']),
             FadeIn(group_graphs['labels']),
@@ -2201,20 +2288,17 @@ class DemoForICAB(PausableScene):
         self.play(Write(objs['text-exp-14']))
         self.play(Write(group_graphs['legend-box']))
         self.play(
-            Write(group_graphs['legend']['$\\mathtt{fCTDE}$']),
-            Write(group_graphs['legend']['$\\mathtt{qfCTDE}$']),
-            Write(group_graphs['legend']['$\\mathtt{sCTDE}$']),
+            Write(group_graphs['legend']['fctde']),
+            Write(group_graphs['legend']['qfctde']),
+            # Write(group_graphs['legend']['sctde']),
         )
-        self.small_pause()
-        # self.play(Write(group_graphs['legend']['$\\mathtt{fCTDE}$']))
-        # self.play(Write(group_graphs['legend']['$\\mathtt{qfCTDE}$']))
-        # self.play(Write(group_graphs['legend']['$\\mathtt{sCTDE}$']))
+        self.small_pause(frozen_frame=False)
         objs['text-exp-15'] = Text("and this is eQMARL", font_size=32).next_to(group_graphs['legend-box'], UP)
         self.play(
             ReplacementTransform(objs['text-exp-14'], objs['text-exp-15']),
-            Write(group_graphs['legend']['$\\mathtt{eQMARL-}\Psi^{+}$']),
+            Write(group_graphs['legend']['eqmarl-psi+']),
         )
-        self.small_pause()
+        self.small_pause(frozen_frame=False)
         self.play(FadeOut(objs['text-exp-15']))
         
         # Add all the plot series so they can be shown.
@@ -2234,14 +2318,15 @@ class DemoForICAB(PausableScene):
 
         # Create a pointer for animating the epochs.
         pointer = always_redraw(
-            lambda: Vector(UP).scale(0.5).next_to(
+            lambda: Vector(DOWN).scale(0.5).next_to(
                 ax.x_axis.n2p(tracker_x_value.get_value()),
-                DOWN,
+                UP,
+                buff=0.1,
             )
         )
         label = always_redraw(
-            lambda pointer=pointer: MathTex(f"e={tracker_x_value.get_value():.0f}", font_size=24).next_to(pointer, DOWN)
-        ).next_to(pointer, DOWN)
+            lambda pointer=pointer: MathTex(f"t={tracker_x_value.get_value():.0f}", font_size=24).next_to(pointer, UP, buff=0.1)
+        ).next_to(pointer, UP, buff=0.1)
         
         objs['text-exp-16'] = Text("After 3,000 unique maze configurations...", font_size=32).next_to(group_graphs['legend-box'], UP)
         self.play(Write(objs['text-exp-16']))
@@ -2274,7 +2359,7 @@ class DemoForICAB(PausableScene):
         self.play(ReplacementTransform(objs['text-exp-16'], objs['text-exp-17']))
         self.play(group_graphs['series'][series_kwargs['key']]['mean'].animate.set_stroke(8), rate_func=there_and_back, run_time=0.5)
         self.play(group_graphs['series'][series_kwargs['key']]['mean'].animate.set_stroke(8), rate_func=there_and_back, run_time=0.5)
-        self.medium_pause()
+        self.medium_pause(frozen_frame=False)
         
         
         # Fade in the std plots.
@@ -2287,46 +2372,52 @@ class DemoForICAB(PausableScene):
         #     run_time=4,
         # )
         
-        self.medium_pause()
+        self.medium_pause(frozen_frame=False)
         
-        
-        # objs['text-exp-19'] = MarkupText("The key takeaways are:", font_size=32).to_edge(UP, buff=2)
-        # objs['text-exp-20'] = BulletedList()
-        # objs['text-exp-20'] = MarkupText("through quantum entanglement", font_size=32).next_to(objs['text-exp-19'], DOWN)
-        # objs['text-exp-21'] = MarkupText("via coupled experiences", font_size=32).next_to(objs['text-exp-20'], DOWN)
-        # objs['text-exp-21'] = MarkupText("agents learn to collaborate", font_size=32).next_to(objs['text-exp-20'], DOWN)
-        
-        objs['text-exp-19'] = MarkupText("The key takeaways are:", font_size=36).to_edge(UP, buff=2)
-        objs['text-exp-20'] = IconList(
-            *[
-                MarkupText("Quantum entangled learning can <b>improve performance</b> and <b>couple agent behavior</b>", font_size=28),
-                MarkupText(f"e<span fgcolor=\"{self.colors['quantum'].to_hex()}\">Q</span>MARL <b>eliminates experience sharing</b>", font_size=28),
-                MarkupText(f"e<span fgcolor=\"{self.colors['quantum'].to_hex()}\">Q</span>MARL can be deployed to <b>learn diverse environments</b>", font_size=28),
-            ],
-            icon=Star(color=YELLOW, fill_opacity=0.5).scale(0.3),
-            buff=(.2, .5),
-            col_alignments='rl',
-        ).next_to(objs['text-exp-19'], DOWN, buff=0.5)
-        # Clear the screen of all objects created in this section.
+        # Fade out everything except watermarks.
         mobjects_in_scene = list(set(self.mobjects) - set([self.eqmarl_acronym, self.attribution_text]))
+        self.play(
+            *[FadeOut(o) for o in mobjects_in_scene]
+        )
+        
+        
+        # # objs['text-exp-19'] = MarkupText("The key takeaways are:", font_size=32).to_edge(UP, buff=2)
+        # # objs['text-exp-20'] = BulletedList()
+        # # objs['text-exp-20'] = MarkupText("through quantum entanglement", font_size=32).next_to(objs['text-exp-19'], DOWN)
+        # # objs['text-exp-21'] = MarkupText("via coupled experiences", font_size=32).next_to(objs['text-exp-20'], DOWN)
+        # # objs['text-exp-21'] = MarkupText("agents learn to collaborate", font_size=32).next_to(objs['text-exp-20'], DOWN)
+        
+        # objs['text-exp-19'] = MarkupText("The key takeaways are:", font_size=36).to_edge(UP, buff=2)
+        # objs['text-exp-20'] = IconList(
+        #     *[
+        #         MarkupText("Quantum entangled learning can <b>improve performance</b> and <b>couple agent behavior</b>", font_size=28),
+        #         MarkupText(f"e<span fgcolor=\"{self.colors['quantum'].to_hex()}\">Q</span>MARL <b>eliminates experience sharing</b>", font_size=28),
+        #         MarkupText(f"e<span fgcolor=\"{self.colors['quantum'].to_hex()}\">Q</span>MARL can be deployed to <b>learn diverse environments</b>", font_size=28),
+        #     ],
+        #     icon=Star(color=YELLOW, fill_opacity=0.5).scale(0.3),
+        #     buff=(.2, .5),
+        #     col_alignments='rl',
+        # ).next_to(objs['text-exp-19'], DOWN, buff=0.5)
+        # # Clear the screen of all objects created in this section.
+        # mobjects_in_scene = list(set(self.mobjects) - set([self.eqmarl_acronym, self.attribution_text]))
+        # # self.play(
+        # #     ReplacementTransform(Group(*mobjects_in_scene), objs['text-exp-19'])
+        # # )
         # self.play(
-        #     ReplacementTransform(Group(*mobjects_in_scene), objs['text-exp-19'])
+        #     *[FadeOut(o) for o in mobjects_in_scene]
         # )
-        self.play(
-            *[FadeOut(o) for o in mobjects_in_scene]
-        )
-        self.play(Write(objs['text-exp-19']))
-        for icon, text in objs['text-exp-20'].enumerate_rows():
-            self.play(Write(icon), Write(text))
-            self.wait(1)
+        # self.play(Write(objs['text-exp-19']))
+        # for icon, text in objs['text-exp-20'].enumerate_rows():
+        #     self.play(Write(icon), Write(text))
+        #     self.wait(1)
         
-        self.medium_pause()
+        # self.medium_pause(frozen_frame=False)
         
-        # Clear the screen of all objects created in this section.
-        mobjects_in_scene = list(set(self.mobjects) - set([self.eqmarl_acronym, self.attribution_text]))
-        self.play(
-            *[FadeOut(o) for o in mobjects_in_scene]
-        )
+        # # Clear the screen of all objects created in this section.
+        # mobjects_in_scene = list(set(self.mobjects) - set([self.eqmarl_acronym, self.attribution_text]))
+        # self.play(
+        #     *[FadeOut(o) for o in mobjects_in_scene]
+        # )
         
         #########################################################
         
@@ -2584,6 +2675,34 @@ class DemoForICAB(PausableScene):
         
         self.long_pause()
 
+
+    def section_summary(self):
+        
+        self.summary_header = MarkupText("The key takeaways are:", font_size=36).to_edge(UP, buff=2)
+        self.summary_list = IconList(
+            *[
+                MarkupText("Quantum entangled learning can <b>improve performance</b> and <b>couple agent behavior</b>", font_size=28),
+                MarkupText(f"e<span fgcolor=\"{self.colors['quantum'].to_hex()}\">Q</span>MARL <b>enhances privacy</b> by eliminating experience sharing", font_size=28),
+                MarkupText(f"e<span fgcolor=\"{self.colors['quantum'].to_hex()}\">Q</span>MARL <b>dramatically reduces communication overhead</b>", font_size=28),
+                MarkupText(f"e<span fgcolor=\"{self.colors['quantum'].to_hex()}\">Q</span>MARL can be deployed to <b>learn diverse environments</b>", font_size=28),
+            ],
+            icon=Star(color=YELLOW, fill_opacity=0.5).scale(0.3),
+            buff=(.2, .5),
+            col_alignments='rl',
+        ).next_to(self.summary_header, DOWN, buff=0.5)
+        self.play(Write(self.summary_header))
+        for icon, text in self.summary_list.enumerate_rows():
+            self.play(Write(icon), Write(text))
+            self.wait(1)
+        
+        self.medium_pause(frozen_frame=False)
+        
+        # # Clear the screen of all objects created in this section.
+        # mobjects_in_scene = list(set(self.mobjects) - set([self.eqmarl_acronym, self.attribution_text]))
+        # self.play(
+        #     *[FadeOut(o) for o in mobjects_in_scene]
+        # )
+
     def section_outro(self):
         """Outro section.
         
@@ -2593,24 +2712,35 @@ class DemoForICAB(PausableScene):
         qr = segno.make("https://arxiv.org/abs/2405.17486", micro=False, error='H')
         img = SegnoQRCodeImageMobject(qr, scale=100, dark=GRAY_A.to_hex(), finder_dark=PURPLE.to_hex(), border=0, light=None).scale(0.1)
         
-        t0 = Text("Paper is available on arXiv", font_size=24)
+        texts = {}
+        texts['subtitle'] = Text("Coordination without Communication", font_size=28)
+        texts['attribution'] = Text("Alexander DeRieux & Walid Saad (2025)", font_size=24)
+        texts['arxiv'] = Text("Paper is available on arXiv", font_size=20)
         
+        # Transform summary list into watermark at top-left.
+        self.play(ReplacementTransform(Group(self.summary_list, self.summary_header), self.eqmarl_acronym))
         
-        self.play(self.eqmarl_acronym.animate.scale(2).move_to(ORIGIN).shift(UP*1.5))
+        # Shift and scale watermark to center as main title.
+        self.play(self.eqmarl_acronym.animate.scale(2).move_to(ORIGIN).shift(UP*2))
         
-        img.next_to(self.eqmarl_acronym, DOWN)
+        # Show subtitle.
+        texts['subtitle'].next_to(self.eqmarl_acronym, DOWN)
+        self.play(Write(texts['subtitle']))
+        
+        # Show QR code.
+        img.next_to(texts['subtitle'], DOWN)
         self.play(FadeIn(img))
         
-        t0.next_to(img, DOWN)
-        self.play(Write(t0))
+        # Show image text.
+        texts['arxiv'].next_to(img, DOWN)
+        self.play(Write(texts['arxiv']))
         
-        t1 = Text("Alexander DeRieux & Walid Saad (2025)", font_size=24).next_to(t0, DOWN)
-        self.play(ReplacementTransform(self.attribution_text, t1))
+        # Show author names.
+        texts['attribution'].next_to(texts['arxiv'], DOWN*1.25)
+        self.play(ReplacementTransform(self.attribution_text, texts['attribution']))
         
-        # self.play(Wiggle(img))
-        
+        # Wait.
         self.long_pause()
-        
 
 
 def make_quantum_gate_1qubit(name: str, color: ManimColor = WHITE):
@@ -2813,3 +2943,153 @@ class QRCodeScene(Scene):
         
         
         self.wait(1)
+
+
+class GridScene(Scene):
+    def construct(self):
+        
+        # dot1 = Dot(point=LEFT * 2 + UP * 2, radius=0.16, color=BLUE)
+        # dot2 = Dot(point=LEFT * 2 + DOWN * 2, radius=0.16, color=MAROON)
+        # dot3 = Dot(point=RIGHT * 2 + DOWN * 2, radius=0.16, color=GREEN)
+        # dot4 = Dot(point=RIGHT * 2 + UP * 2, radius=0.16, color=YELLOW)
+        # self.add(dot1, dot2, dot3, dot4)
+
+        # # self.play(Succession(
+        # #     ApplyMethod(dot1.move_to, dot2),
+        # #     ApplyMethod(dot2.move_to, dot3),
+        # #     Flash(dot2.get_center()),
+        # #     ApplyMethod(dot3.move_to, dot4),
+        # #     ApplyMethod(dot4.move_to, dot1),
+        # # ))
+        
+        # self.play(LaggedStart(
+        #     ApplyMethod(dot1.move_to, dot2),
+        #     Flash(dot2.get_center()),
+        #     ApplyMethod(dot2.move_to, dot3),
+        #     ApplyMethod(dot3.move_to, dot4),
+        #     ApplyMethod(dot4.move_to, dot1),
+        #     lag_ratio=1,
+        # ))
+        
+        
+        ######
+        
+        objs = {}
+        objs['grid-big-left'] = MObjectWithLabel(
+            obj=MiniGrid(
+                grid_size=(5,5),
+                hazards_grid_pos=[
+                    (1,1),
+                    (1,2),
+                    (1,3),
+                ],
+                goal_grid_pos=(-1,-1),
+            ).scale(0.5),
+            label=Text("Environment A", font_size=18),
+            buff=0.1,
+            direction=DOWN,
+        ).to_edge(DOWN, buff=0.5).shift(LEFT*3)
+        objs['grid-big-right'] = MObjectWithLabel(
+            obj=MiniGrid(
+                grid_size=(5,5),
+                hazards_grid_pos=[
+                    (1,1),
+                    (2,1),
+                    (3,1),
+                ],
+                goal_grid_pos=(-1,-1),
+            ).scale(0.5),
+            label=Text("Environment B", font_size=18),
+            buff=0.1,
+            direction=DOWN,
+        ).to_edge(DOWN, buff=0.5).shift(RIGHT*3)
+        self.add(objs['grid-big-left'], objs['grid-big-right'])
+        
+        # self.play(
+        #     Succession(
+        #         ApplyMethod(objs['grid-big-left'].obj.move_player, a)
+        #         for a in minigrid_path_str_to_list('fff')
+        #     ),
+        #     Succession(
+        #         ApplyMethod(objs['grid-big-right'].obj.move_player, a)
+        #         for a in minigrid_path_str_to_list('rfff')
+        #     ),
+        #     run_time=2,
+        # )
+        
+        self.play(
+            # Succession(
+            #     ApplyMethod(objs['grid-big-left'].obj.move_player, a)
+            #     for a in minigrid_path_str_to_list('rfff')
+            # ),
+            # objs['grid-big-left'].obj.animate_actions(*minigrid_path_str_to_list('rfff')),
+            objs['grid-big-left'].obj.animate_actions(*minigrid_path_str_to_list('fffrfffflf')),
+            # Succession(
+            #     ApplyMethod(objs['grid-big-right'].obj.move_player, a)
+            #     for a in minigrid_path_str_to_list('flfff')
+            # ),
+            run_time=4,
+        )
+    
+    # def add(self, *args, **kwargs):
+    #     super().add(*args, **kwargs)
+        
+    #     if 'VGroup(Line' in str(args[0].submobjects):
+    #         import traceback
+    #         print(args[0].submobjects)
+    #         traceback.print_stack()
+
+
+
+class CustomFlash(AnimationGroup):
+    """Custom `Flash` animation to work with `Succession` animation groups."""
+    def __init__(
+        self,
+        point: np.ndarray | Mobject,
+        line_length: float = 0.2,
+        num_lines: int = 12,
+        flash_radius: float = 0.1,
+        line_stroke_width: int = 3,
+        color: str = YELLOW,
+        time_width: float = 1,
+        run_time: float = 1.0,
+        **kwargs,
+    ) -> None:
+        if isinstance(point, Mobject):
+            self.point = point.get_center()
+        else:
+            self.point = point
+        self.color = color
+        self.line_length = line_length
+        self.num_lines = num_lines
+        self.flash_radius = flash_radius
+        self.line_stroke_width = line_stroke_width
+        self.run_time = run_time
+        self.time_width = time_width
+        self.animation_config = kwargs
+
+        self.lines = self.create_lines()
+        animations = self.create_line_anims()
+        super().__init__(*animations)
+
+    def create_lines(self) -> VGroup:
+        lines = VGroup()
+        for angle in np.arange(0, TAU, TAU / self.num_lines):
+            line = Line(self.point, self.point + self.line_length * RIGHT)
+            line.shift((self.flash_radius) * RIGHT)
+            line.rotate(angle, about_point=self.point)
+            lines.add(line)
+        lines.set_color(self.color)
+        lines.set_stroke(width=self.line_stroke_width)
+        return lines
+
+    def create_line_anims(self) -> Iterable[ShowPassingFlash]:
+        return [
+            ShowPassingFlash(
+                line,
+                time_width=self.time_width,
+                run_time=self.run_time,
+                **self.animation_config,
+            )
+            for line in self.lines
+        ]
