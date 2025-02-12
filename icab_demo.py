@@ -20,6 +20,63 @@ import segno
 
 # Example of making a neural network with Manim: https://medium.com/@andresberejnoi/using-manim-and-python-to-create-animations-like-3blue1brown-andres-berejnoi-34f755606761
 
+class IconList(VGroup):
+    def __init__(self, *items: VMobject, icon: VMobject, **kwargs):
+        super().__init__()
+        n_items = len(items)
+        for item in items:
+            self.add(icon.copy())
+            self.add(item)
+        self.arrange_in_grid(rows=n_items, cols=2, **kwargs)
+    
+    def enumerate_rows(self):
+        n_items = len(self.submobjects)
+        for i in range(0, n_items-1, 2):
+            print(f"{i=}")
+            yield (self.submobjects[i], self.submobjects[i+1])
+
+class TestScene(Scene):
+    def construct(self):
+        
+        objs = {}
+        
+        # pgbar = always_redraw(lambda: Rectangle(height=0.2, width=, color=BLUE, fill_opacity=0.5).to_edge(DOWN, buff=0))
+        
+        objs['text-exp-19'] = MarkupText("The key takeaways are:", font_size=32).to_edge(UP, buff=2)
+        objs['text-exp-20'] = IconList(
+            *[
+                MarkupText("Quantum entangled learning can <b>improve performance</b> and <b>couple agent behavior</b>", font_size=28),
+                MarkupText("eQMARL <b>eliminates experience sharing</b>", font_size=28),
+                MarkupText("eQMARL can be deployed to <b>learn a diverse environments</b>", font_size=28),
+            ],
+            icon=Star(color=YELLOW, fill_opacity=0.5).scale(0.3),
+            buff=(.2, .5),
+            col_alignments='rl',
+        ).next_to(objs['text-exp-19'], DOWN, buff=0.5)
+        self.play(Write(objs['text-exp-19']))
+        
+        for icon, text in objs['text-exp-20'].enumerate_rows():
+            self.play(Write(icon), Write(text))
+            self.wait(1)
+        
+        self.eqmarl_logo = Text("eQMARL", font_size=32)
+        
+        self.play(
+            ReplacementTransform(
+                Group(objs['text-exp-19'], objs['text-exp-20']),
+                self.eqmarl_logo
+            ),
+        )
+        
+        
+        
+        # objs['text-exp-20'] = BulletedList(
+        #     MarkupText("Quantum entanglement couples agent experiences to learn optimal strategies"),
+        #     font_size=32,
+        # )
+        # self.add(objs['text-exp-20'])
+        
+
 def load_train_results(filepath: str | Path) -> tuple[list, dict[str, Any]]:
     """Loads training results from JSON file."""
     with open(str(filepath), 'r') as f:
@@ -170,50 +227,45 @@ def minigrid_path_str_to_list(s: str) -> list[MinigridAction]:
     return path
 
 # class MiniGridPlayer(VGroup):
-class RotationTrackableVGroup(VGroup):
-    
+
+class RotationTrackableGroup(Group):
+    """Facilitates tracking the rotation angle of MObjects.
+    """
     def __init__(self, *args, angle: float = 0., **kwargs):
         super().__init__(*args, **kwargs)
-        # self.tracker_r = ValueTracker(0)
-        # self.tracker_c = ValueTracker(1)
         self.tracker_angle = ValueTracker(angle)
-        # self._invisible_line = Line(self.get_top(), self.get_bottom(), stroke_width=0)
-        # self._invisible_line = Line(self.get_bottom(), self.get_top(), stroke_width=0)
-        # self._invisible_line = Line(self.get_right(), self.get_left(), stroke_width=0)
         self._invisible_line = Line(self.get_left(), self.get_right(), stroke_width=0) # 0 degrees.
-        # self._invisible_line = Line(ORIGIN, ORIGIN+RIGHT, stroke_width=0)
         self.add(self._invisible_line)
-
-        # self.add(VGroup(*[
-        #     Triangle(color=RED, fill_opacity=0.5),
-        #     Dot(Triangle().get_top()) # Dot represents the leading tip of the player triangle.
-        # ],z_index=1).rotate(270*DEGREES), # Higher z-index sets on top.
-        # )
     
     def get_angle(self):
-        # return self.tracker_angle.get_value()
         return self._invisible_line.get_angle()
-    
-    # def rotate(self, angle: float, *args, **kwargs):
-    #     # self.tracker_angle.set_value(angle*(180./PI)) # Track the look angle in degrees.
-    #     # self.tracker_angle.set_value(angle) # Track the look angle in radians.
-    #     return super().rotate(angle, *args, **kwargs)
 
-class MiniGrid(VGroup):
+class RotationTrackableVGroup(RotationTrackableGroup, VGroup):
+    """Facilitates tracking the rotation angle of VMObjects.
+    """
+    pass
+
+class MiniGrid(Group):
     
     # Common objects for reuse.
-    assets: dict[str, VMobject] = {
-        'grid_empty': Square(color=GRAY, fill_opacity=0),
-        'grid_lava': Square(color=ORANGE, fill_opacity=0.5),
-        'grid_goal': Square(color=GREEN, fill_opacity=0.5),
+    assets: dict[str, Mobject] = {
+        'grid-empty': Square(color=GRAY, fill_opacity=0),
+        'grid-lava': Square(color=ORANGE, fill_opacity=0.5),
+        'grid-goal': Square(color=GREEN, fill_opacity=0.5),
         # 'player': VGroup(*[
         #     Triangle(color=RED, fill_opacity=0.5),
         #     Dot(Triangle().get_top()) # Dot represents the leading tip of the player triangle.
         # ],z_index=1).rotate(270*DEGREES), # Higher z-index sets on top.
+        #####
         'player': RotationTrackableVGroup(VGroup(*[
             Triangle(color=RED, fill_opacity=0.5),
             Dot(Triangle().get_top()) # Dot represents the leading tip of the player triangle.
         ],z_index=1)).rotate(270*DEGREES), # Higher z-index sets on top.
+        # 'player': RotationTrackableGroup(Group(*[
+        #     ImageMobject("assets/images/quadcopter.png").scale(0.5),
+        #     # Dot(Triangle().get_top()) # Dot represents the leading tip of the player triangle.
+        # ],z_index=1)),
+        # .rotate(270*DEGREES), # Higher z-index sets on top.
         # 'player': MiniGridPlayer(),
     }
     
@@ -233,17 +285,6 @@ class MiniGrid(VGroup):
         goal_grid_pos = tuple(negative_index_rollover(i, size) for i,size in zip(goal_grid_pos, grid_size))
         hazards_grid_pos = [tuple(negative_index_rollover(i, size) for i,size in zip(haz, grid_size)) for haz in hazards_grid_pos]
         
-        # Defaults to `RIGHT`, and upper-left (0,0).
-        self.player_look_angle = player_look_angle
-        self.player_grid_pos = player_grid_pos
-        # self.tracker_player_grid_pos_r = ValueTracker(player_grid_pos[0])
-        # self.tracker_player_grid_pos_c = ValueTracker(player_grid_pos[1])
-        # print(f"{player_grid_pos=}")
-        # self.player_grid_pos_var = Variable(np.array(list(player_grid_pos)), "player_grid_pos")
-        # self.player_grid_pos_var = ValueTracker(np.array(player_grid_pos))
-        # self.player_grid_pos_x = ValueTracker(player_grid_pos[0])
-        # self.player_grid_pos_y = ValueTracker(player_grid_pos[1])
-        # self.player_grid_pos_z = ValueTracker(player_grid_pos[1])
         self.goal_pos = goal_grid_pos
         self.hazards_grid_pos = hazards_grid_pos
         
@@ -253,40 +294,15 @@ class MiniGrid(VGroup):
             player_pos=player_grid_pos,
             goal_pos=self.goal_pos,
             hazards=self.hazards_grid_pos,
-            grid_obj_default=self.assets['grid_empty'],
-            grid_obj_hazard=self.assets['grid_lava'],
-            grid_obj_goal=self.assets['grid_goal'],
+            grid_obj_default=self.assets['grid-empty'],
+            grid_obj_hazard=self.assets['grid-lava'],
+            grid_obj_goal=self.assets['grid-goal'],
             grid_obj_player=self.assets['player'],
         )
-        self.world = VDict(world_dict)
+        self.world = world_dict
+
         # IMPORTANT - we must add all sub-objects that we want displayed.
-        self.add(self.world)
-        # self.world['player'].grid_pos = self.player_grid_pos
-        # self.add(world_dict['player'], world_dict['grid'])
-        
-        # self.world['player'].tracker_angle = ValueTracker(270)
-        
-        # player_grid_coord = self.pos_to_coord(player_grid_pos) # Must be called after creating the world.
-        # self.tracker_player_grid_coord_x = ValueTracker(player_grid_coord[0]) # X
-        # self.tracker_player_grid_coord_y = ValueTracker(player_grid_coord[1]) # Y
-        # self.tracker_player_grid_coord_z = ValueTracker(player_grid_coord[2]) # Z
-        
-        
-        # self.ref_player_pos = VectorizedPoint(self.world['player'].get_center())
-        
-        # print(f"center={self.world['grid'][int(self.player_grid_pos_var.get_value()[0])*self.grid_size[0] + int(self.player_grid_pos_var.get_value()[1])].get_center()}")
-        
-        # print(f"{self.pos_to_coord((0,1))}, {self.world['grid'][self.pos_to_index((0,1))].get_center()}, {self.coord_to_pos(self.world['grid'][self.pos_to_index((0,1))].get_center())}")
-        # print(f"{self.pos_to_coord((2,3))}, {self.world['grid'][self.pos_to_index((2,3))].get_center()}, {self.coord_to_pos(self.world['grid'][self.pos_to_index((2,3))].get_center())}")
-        
-        # self.world['player'].add_updater(lambda m: m.move_to(np.array([
-        #     self.tracker_player_grid_coord_x.get_value(),
-        #     self.tracker_player_grid_coord_y.get_value(),
-        #     self.tracker_player_grid_coord_z.get_value(),
-        # ])))
-    
-    # def __update_player(self):
-        
+        self.add(*[m for k, m in world_dict.items()])
     
     def pos_to_index(self, pos: tuple[int,int]) -> int:
         """Converts a 2D position to a 1D index."""
@@ -318,8 +334,29 @@ class MiniGrid(VGroup):
         """
         closest_index = self.coord_to_index(coord)
         return self.index_to_pos(closest_index)
-        
 
+    def get_player_coord(self) -> Point3D:
+        """Get player position as 3D scene coordinate."""
+        return self.world['player'].get_center() # Get scene coordinate for player.
+
+    def get_player_pos(self) -> tuple[int, int]:
+        """Get player position as 2D grid coordinate (row, col)."""
+        r, c = self.coord_to_pos(self.get_player_coord()) # Converts coordinate to (row,col).
+        return int(r), int(c) # Ensure integer.
+
+    def get_player(self) -> Mobject:
+        return self.world['player']
+
+    def get_goal_coord(self) -> Point3D:
+        """Get goal position as 3D scene coordinate."""
+        return self.pos_to_coord(self.goal_pos)
+    
+    def get_goal_pos(self) -> tuple[int, int]:
+        """Get goal position as 2D grid coordinate (row, col)."""
+        return self.goal_pos
+
+    def get_goal(self) -> Mobject:
+        return self.world['grid'][self.pos_to_index(self.get_goal_pos())]
 
     @staticmethod
     def build_minigrid(
@@ -331,7 +368,6 @@ class MiniGrid(VGroup):
         player_pos: tuple[int, int] | None = None, # Defaults to top-left.
         goal_pos: tuple[int, int] | None = None, # Defaults to bottom-right.
         hazards: list[tuple[int, int]] = [],
-        # grid_obj_player: Mobject = obj_player,
         ) -> dict:
         """Helper function to generate a MiniGrid environment.
         
@@ -355,8 +391,6 @@ class MiniGrid(VGroup):
         for r in range(grid_size[0]):
             cols = []
             for c in range(grid_size[1]):
-                # if (r,c) == player_pos:
-                #     cols.append(grid_obj_player.copy())
                 if (r,c) == goal_pos:
                     cols.append(grid_obj_goal.copy())
                 elif (r,c) in hazards:
@@ -369,49 +403,34 @@ class MiniGrid(VGroup):
         grid.arrange_in_grid(rows=grid_size[0], cols=grid_size[1], buff=0)
         
         player = grid_obj_player.copy()
-        # player_pos = (0,0)
         player_target_pos = grid[player_pos[0]*grid_size[0] + player_pos[1]].get_center()
         player.move_to(player_target_pos)
-        # player.tracker_r.set_value(player_pos[0])
-        # player.tracker_c.set_value(player_pos[1])
-        # world = VDict({
-        #     'player': player,
-        #     'grid': grid,
-        # })
-        # return world
         return {
             'player': player,
             'grid': grid,
         }
+
+    @staticmethod
+    def round_to_nearest_angle(angle: float) -> int:
+        """Round angle to nearest [0, 90, 180, 270, 360].
         
-    
-    # def animate_move_player(self, action: MinigridAction, *args, **kwargs) -> Animation:
-    #     return MiniGridMovePlayer(self, action, *args, **kwargs)
+        Supports negative angles.
+        
+        Examples:
+        * 179 -> 180
+        * 221 -> 180
+        * 14 -> 0
+        * 100 -> 90
+        * -90 -> 270
+        """
+        angle = int(round(angle / 90) * 90) # Round to nearest [0, 90, 180, 270, 360].
+        angle = angle % 360 # Convert to range [0, 359].
+        return angle
 
     def move_player_forward(self):
         """Move player forward in the direction it is facing."""
-        # r,c = self.player_grid_pos
-        # r,c = self.player_grid_pos_var.tracker.get_value()
-        # x = self.tracker_player_grid_coord_x.get_value()
-        # y = self.tracker_player_grid_coord_y.get_value()
-        # z = self.tracker_player_grid_coord_z.get_value()
-        
-        # r, c = self.coord_to_pos(np.array([x, y, z]))
-        # print(f"{(x,y,z)=}, {(r,c)=}")
-        
-        # r, c = self.world['player'].tracker_r.get_value(), self.world['player'].tracker_c.get_value()
-        r, c = self.coord_to_pos(self.world['player'].get_center()) # Converts coordinate to (row,col).
-        r, c = int(r), int(c)
-        # print(f"[start] coord={self.world['player'].get_center()}, {(r,c)=}")
-        # print(f"{(self.world['player'].tracker_r.get_value(),self.world['player'].tracker_c.get_value())=}")
-        # r, c = self.world['player'].grid_pos
-        
-        # r, c = int(self.tracker_player_grid_pos_r.get_value()), int(self.tracker_player_grid_pos_c.get_value())
-        # print(f"[forward:start] player={self.world['player'].get_center()}, {(r,c)}")
-        # player_look_angle = self.world['player'].tracker_angle.get_value()
-        player_look_angle = self.world['player'].get_angle() * (180./PI) # Get look angle in degrees.
-        player_look_angle = int(round(player_look_angle / 90) * 90) # Round to nearest [0, 90, 180, 270, 360].
-        player_look_angle = player_look_angle % 360 # Convert to range [0, 359].
+        r, c = self.get_player_pos() # Converts coordinate to (row,col).
+        player_look_angle = self.round_to_nearest_angle(self.world['player'].get_angle() * (180./PI)) # Get look angle in degrees.
         if player_look_angle % 360 == 0: # UP
             r -= 1
         elif player_look_angle == 90: # LEFT
@@ -423,67 +442,25 @@ class MiniGrid(VGroup):
         
         # Only move if does not exceed grid boundary.
         if (r >= 0 and r < self.grid_size[0]) and (c >= 0 and c < self.grid_size[1]):
-            # # print(f"was={self.player_grid_pos}, now={(r,c)}")
-            # # print(f"was={self.world['player'].get_center()}")
-            # self.player_grid_pos = (r,c)
-            # self.tracker_player_grid_pos_r.set_value(r)
-            # self.tracker_player_grid_pos_c.set_value(c)
-            # self.world['player'].grid_pos = r, c
-            # self.world['player'].tracker_r.set_value(r)
-            # self.world['player'].tracker_c.set_value(c)
-            # print(f"{(self.world['player'].tracker_r.get_value(),self.world['player'].tracker_c.get_value())=}")
             target_pos = self.world['grid'][r*self.grid_size[0] + c].get_center()
-            # # self.world['player'].shift(shift_direction)
-            # self.world['player'].move_to(target_pos)
             self.world['player'].move_to(target_pos)
-            # print(f"[forward:end] player={self.world['player'].get_center()}, {(r,c)}")
-            # # self.world['player'].set_angle
-            # # print(f"now={self.world['player'].get_center()}")
-            # print(f"[end] coord={self.world['player'].get_center()}, {(r,c)=}")
-            
-            
-            # self.player_grid_pos_var.tracker.set_value(np.array([r, c]))
-            
-            # target_xyz = self.pos_to_coord((r,c))
-            # self.tracker_player_grid_coord_x.set_value(target_xyz[0])
-            # self.tracker_player_grid_coord_y.set_value(target_xyz[1])
-            # self.tracker_player_grid_coord_z.set_value(target_xyz[2])
-            
-            # print(f"{target_xyz=}, {(r,c)=}")
             
         return self
-        
-        # return self.world['player']
 
     def move_player_left(self):
         """Move player left."""
-        # player_look_angle = self.world['player'].tracker_angle.get_value()
-        player_look_angle = self.world['player'].get_angle() * (180./PI)
-        print(f"[left:start] {player_look_angle=}")
         turn_amount = +90
-        new_angle = (player_look_angle + turn_amount)
-        self.player_look_angle = new_angle % 360
         self.world['player'].rotate(turn_amount*DEGREES)
-        # self.world['player'].tracker_angle.set_value(turn_amount)
-        print(f"[left:end] {self.world['player'].get_angle() * (180./PI)}")
         return self
     
     def move_player_right(self):
         """Move player right."""
-        # player_look_angle = self.world['player'].tracker_angle.get_value()
-        player_look_angle = self.world['player'].get_angle() * (180./PI)
-        print(f"[right:start] {player_look_angle=}")
         turn_amount = -90
-        new_angle = (player_look_angle + turn_amount)
-        self.player_look_angle = new_angle % 360
         self.world['player'].rotate(turn_amount*DEGREES)
-        # self.world['player'].tracker_angle.set_value(turn_amount)
-        print(f"[right:end] {self.world['player'].get_angle() * (180./PI)}")
         return self
 
     def move_player(self, action: MinigridAction):
         """Moves player corresponding to an action, which is one of (LEFT, RIGHT, FORWARD)."""
-        
         if action == MinigridAction.LEFT:
             return self.move_player_left()
         elif action == MinigridAction.RIGHT:
@@ -529,13 +506,13 @@ class DemoForICAB(PausableScene):
         # Each section should cleanup any objects after itself if they are not to be used again.
         # Sections can be tested individually, to do this set `skip_animations=True` to turn off all other sections not used (note that the section will still be generated, allowing objects to move to their final position for use with future sections in the pipeline).
         sections: list[tuple[Callable, dict]] = [
-            (self.section_title, dict(name="Title", skip_animations=True)),
-            (self.section_motivation, dict(name="Motivation", skip_animations=True)),
+            (self.section_title, dict(name="Title", skip_animations=False)),
+            # (self.section_motivation, dict(name="Motivation", skip_animations=False)),
             # (self.section_scenario_old, dict(name="Scenario-OLD", skip_animations=True)),
-            (self.section_scenario, dict(name="Scenario", skip_animations=True)),
+            (self.section_scenario, dict(name="Scenario", skip_animations=False)),
             (self.section_experiment, dict(name="Experiment", skip_animations=False)),
             # (self.section_results, dict(name="Results", skip_animations=False)),
-            # (self.section_outro, dict(name="Outro", skip_animations=True)), # Play last.
+            (self.section_outro, dict(name="Outro", skip_animations=False)), # Play last.
             (self.section_placeholder, dict(name="Placeholder", skip_animations=False)),
         ]
         for method, section_kwargs in sections:
@@ -1634,6 +1611,7 @@ class DemoForICAB(PausableScene):
             Write(arrows['env-right-down']),
         )
         self.play(Write(texts['quantum-5']))
+        self.medium_pause()
         
         # Lasting point before section change.
         self.play(ReplacementTransform(VGroup(texts['quantum-3'], texts['quantum-4'], texts['quantum-5']), texts['quantum-6']))
@@ -1653,10 +1631,26 @@ class DemoForICAB(PausableScene):
         )
 
     def section_experiment(self):
-        self.next_section('experiment-debug-start', skip_animations=True) # Do not animate anything below this.
+        # self.next_section('experiment-debug-start', skip_animations=True) # Do not animate anything below this.
         
         objs = {}
-        objs['grid-left'] = MiniGrid(
+        
+        # Text objects.
+        objs['text-exp-0'] = Text("Let's see an example", font_size=32)
+        objs['text-exp-1'] = Tex(r"This is an $5\times5$ grid environment for 1 player", font_size=32).to_edge(UP, buff=1.5)
+        objs['text-exp-2'] = Tex(r"The player can take actions $a \in \{\textrm{left}, \textrm{right}, \textrm{forward}\}$ to move in the grid", font_size=32).to_edge(UP, buff=1.5)
+        objs['text-exp-3'] = Text("As the player moves it gathers experiences", font_size=32).to_edge(UP, buff=1.5)
+        objs['text-exp-4'] = Text("The player learns from experiences to find the goal", font_size=32).to_edge(UP, buff=1.5)
+        objs['text-exp-5'] = Text("Now consider 2 parallel environments with different agents", font_size=32).to_edge(UP, buff=1.5)
+        objs['text-exp-6'] = Text("The agents cannot directly communicate with each other", font_size=32).to_edge(UP, buff=1.5)
+        objs['text-exp-7'] = Text("Which means they cannot coordinate using shared experiences", font_size=32).to_edge(UP, buff=1.5)
+        objs['text-exp-8'] = MarkupText(f"<span fgcolor=\"{self.colors['quantum'].to_hex()}\">Quantum entanglement</span> between the agents", font_size=32).to_edge(UP, buff=1.2)
+        objs['text-exp-9'] = MarkupText(f"couples their <span fgcolor=\"{self.colors['observation']}\">unique local experiences</span>", font_size=32).next_to(objs['text-exp-8'], DOWN)
+        objs['text-exp-10'] = MarkupText(f"allowing them to learn optimal <span fgcolor=\"{self.colors['action']}\">actions</span> <u>without</u> <span fgcolor=\"{self.colors['no']}\">direct communication</span>", font_size=32).next_to(objs['text-exp-9'], DOWN)
+        
+        # MiniGrids.
+        # Big center.
+        objs['grid-big-center'] = MiniGrid(
             grid_size=(5,5),
             hazards_grid_pos=[
                 (1,1),
@@ -1664,63 +1658,674 @@ class DemoForICAB(PausableScene):
                 (1,3),
             ],
             goal_grid_pos=(-1,-1),
-        ).scale(0.3).shift(LEFT*3)
-        objs['grid-right'] = MiniGrid(
-            grid_size=(5,5),
-            hazards_grid_pos=[
-                (2,2),
-                (2,3),
-                (2,4),
-            ],
-            goal_grid_pos=(-1,-2),
-        ).scale(0.3).shift(RIGHT*3)
+        ).scale(0.5).to_edge(DOWN, buff=0.5)
+        # MiniGrid legend for big grid.
+        objs['grid-big-legend'] = Group(*[
+            MObjectWithLabel(
+                obj=objs['grid-big-center'].assets['grid-empty'].copy().scale(0.25),
+                label=Text("Empty grid square", font_size=18),
+                buff=0.2,
+                direction=RIGHT,
+            ),
+            MObjectWithLabel(
+                obj=objs['grid-big-center'].assets['grid-lava'].copy().scale(0.25),
+                label=Text("Lava hazard", font_size=18),
+                buff=0.2,
+                direction=RIGHT,
+            ),
+            MObjectWithLabel(
+                obj=objs['grid-big-center'].assets['grid-goal'].copy().scale(0.25),
+                label=Text("Goal", font_size=18),
+                buff=0.2,
+                direction=RIGHT,
+            ),
+            MObjectWithLabel(
+                obj=objs['grid-big-center'].assets['player'].copy().scale(0.25),
+                label=Text("Drone", font_size=18),
+                buff=0.2,
+                direction=RIGHT,
+            ),
+        ]).arrange(DOWN, aligned_edge=LEFT, buff=0.5).next_to(objs['grid-big-center'], RIGHT)
+        # Big left.
+        objs['grid-big-left'] = MObjectWithLabel(
+            obj=MiniGrid(
+                grid_size=(5,5),
+                hazards_grid_pos=[
+                    (1,1),
+                    (1,2),
+                    (1,3),
+                ],
+                goal_grid_pos=(-1,-1),
+            ).scale(0.5),
+            label=Text("Environment A", font_size=18),
+            buff=0.1,
+            direction=DOWN,
+        ).to_edge(DOWN, buff=0.5).shift(LEFT*3)
+        # Big right.
+        objs['grid-big-right'] = MObjectWithLabel(
+            obj=MiniGrid(
+                grid_size=(5,5),
+                hazards_grid_pos=[
+                    (1,1),
+                    (2,1),
+                    (3,1),
+                ],
+                goal_grid_pos=(-1,-1),
+            ).scale(0.5),
+            label=Text("Environment B", font_size=18),
+            buff=0.1,
+            direction=DOWN,
+        ).to_edge(DOWN, buff=0.5).shift(RIGHT*3)
+        # Small left.
+        objs['grid-small-left'] = objs['grid-big-left'].copy().scale(0.75).shift(LEFT).to_edge(DOWN, buff=0.5)
+        objs['grid-small-left'].label.scale(1./0.75) # Undo scaling of text size.
+        # Small right.
+        objs['grid-small-right'] = objs['grid-big-right'].copy().scale(0.75).shift(RIGHT).to_edge(DOWN, buff=0.5)
+        objs['grid-small-right'].label.scale(1./0.75) # Undo scaling of text size.
+        # Small up.
+        objs['grid-small-up'] = MObjectWithLabel(
+            obj=MiniGrid(
+                grid_size=(5,5),
+                hazards_grid_pos=[
+                    (1,1),
+                    (1,2),
+                    (1,3),
+                ],
+                goal_grid_pos=(-1,-1),
+            ).scale(0.2),
+            label=Text("Env. A", font_size=18),
+            buff=0.1,
+            direction=LEFT,
+        ).to_edge(LEFT, buff=0.5).shift(UP*1.5)
+        # Small down.
+        objs['grid-small-down'] = MObjectWithLabel(
+            obj=MiniGrid(
+                grid_size=(5,5),
+                hazards_grid_pos=[
+                    (1,1),
+                    (2,1),
+                    (3,1),
+                ],
+                goal_grid_pos=(-1,-1),
+            ).scale(0.2),
+            label=Text("Env. B", font_size=18),
+            buff=0.1,
+            direction=LEFT,
+        ).to_edge(LEFT, buff=0.5).to_edge(DOWN, buff=0.5)
+        objs['group-grid-small-up/down'] = Group(objs['grid-small-up'], objs['grid-small-down'])
         
-        self.play(Write(objs['grid-left']))
-        self.play(Write(objs['grid-right']))
+        # Qubits.
+        objs['qubit-left'] = MObjectWithLabel(
+            obj=Qubit(has_text=False, circle_color=self.colors['quantum'], ellipse_color=self.colors['quantum']).scale(0.4),
+            label=Text("Qubit A", font_size=18),
+            buff=0.1,
+            direction=UP,
+        ).next_to(objs['grid-small-left'].obj, RIGHT)
+        objs['qubit-right'] = MObjectWithLabel(
+            obj=Qubit(has_text=False, circle_color=self.colors['quantum'], ellipse_color=self.colors['quantum']).scale(0.4),
+            label=Text("Qubit B", font_size=18),
+            buff=0.1,
+            direction=UP,
+        ).next_to(objs['grid-small-right'].obj, LEFT)
+        objs['qubit-up'] = MObjectWithLabel(
+            obj=Qubit(has_text=False, circle_color=self.colors['quantum'], ellipse_color=self.colors['quantum']).scale(0.2),
+            label=Text("Qubit A", font_size=18),
+            buff=0.1,
+            direction=LEFT,
+        ).next_to(objs['grid-small-up'], DOWN)
+        objs['qubit-down'] = MObjectWithLabel(
+            obj=Qubit(has_text=False, circle_color=self.colors['quantum'], ellipse_color=self.colors['quantum']).scale(0.2),
+            label=Text("Qubit B", font_size=18),
+            buff=0.1,
+            direction=LEFT,
+        ).next_to(objs['grid-small-down'], UP)
         
-        self.next_section('experiment-debug-stop', skip_animations=False) # Animate everything after this.
+        # Trackers.
+        objs['tracker-amp-0'] = ValueTracker(0.2)
+        objs['tracker-freq-0'] = ValueTracker(2*PI)
         
-        # for a in [MinigridAction.FORWARD, MinigridAction.FORWARD, MinigridAction.FORWARD]:
-        # for a in [MinigridAction.FORWARD, MinigridAction.FORWARD, MinigridAction.FORWARD]:
-        #     self.play(ApplyMethod(objs['grid-left'].move_player, a))
-            # print(f"[play:end] player={objs['grid-left'].world['player'].get_center()}, {objs['grid-left'].player_grid_pos}")
-            # self.play(objs['grid-left'].animate.move_player(a))
-        # self.play(
-        #     Succession(
-        #         ApplyMethod(objs['grid-left'].move_player, a)
-        #         # objs['grid-left'].animate.move_player(a)
-        #         # objs['grid-left'].animate.move_player(a)
-        #         # for a in [MinigridAction.RIGHT, MinigridAction.FORWARD, MinigridAction.FORWARD, MinigridAction.FORWARD]
-        #         # for a in [MinigridAction.FORWARD, MinigridAction.FORWARD, MinigridAction.FORWARD, MinigridAction.FORWARD]
-        #         # for a in [MinigridAction.LEFT, MinigridAction.RIGHT]
-        #         # for a in [MinigridAction.LEFT, MinigridAction.LEFT, MinigridAction.LEFT]
-        #         # for a in [MinigridAction.FORWARD, MinigridAction.LEFT, MinigridAction.FORWARD, MinigridAction.RIGHT, MinigridAction.FORWARD, MinigridAction.RIGHT, MinigridAction.FORWARD]
-        #         for a in [MinigridAction.FORWARD, MinigridAction.FORWARD, MinigridAction.RIGHT, MinigridAction.FORWARD, MinigridAction.FORWARD, MinigridAction.LEFT, MinigridAction.FORWARD, MinigridAction.FORWARD]
-        #     ),
-        # )
-        #################
-        # self.play(objs['grid-left'].animate.move_player(MinigridAction.FORWARD))
-        # self.play(objs['grid-left'].animate.move_player(MinigridAction.RIGHT))
-        # self.play(objs['grid-left'].animate.move_player(MinigridAction.FORWARD))
-        # self.play(objs['grid-left'].animate.move_player(MinigridAction.LEFT))
-        # self.play(objs['grid-left'].animate.move_player(MinigridAction.FORWARD))
-        # self.play(objs['grid-left'].animate.move_player(MinigridAction.FORWARD))
-        ################
+        # Waves.
+        # Left/Right.
+        objs['wave-leftright'] = VGroup(*[
+            always_redraw(
+                lambda: FunctionGraph(
+                    lambda x: objs['tracker-amp-0'].get_value()*np.sin(objs['tracker-freq-0'].get_value()*x + self.time),
+                    x_range=[-1, 1],
+                    color=self.colors['wave-primary'],
+                ).stretch_to_fit_width(abs(objs['qubit-left'].obj.get_x(RIGHT) - objs['qubit-right'].obj.get_x(LEFT))).next_to(objs['qubit-left'].obj, RIGHT, buff=0)
+            ),
+            always_redraw(
+                lambda: FunctionGraph(
+                    lambda x: objs['tracker-amp-0'].get_value()*np.sin(objs['tracker-freq-0'].get_value()*x - self.time + PI),
+                    x_range=[-1, 1],
+                    color=self.colors['wave-secondary'],
+                ).stretch_to_fit_width(abs(objs['qubit-left'].obj.get_x(RIGHT) - objs['qubit-right'].obj.get_x(LEFT))).next_to(objs['qubit-left'].obj, RIGHT, buff=0)
+            ),
+        ])
+        # Up/Down.
+        objs['wave-updown'] = VGroup(*[
+            always_redraw(
+                lambda: FunctionGraph(
+                    lambda x: objs['tracker-amp-0'].get_value()*np.sin(objs['tracker-freq-0'].get_value()*x + self.time),
+                    x_range=[-1, 1],
+                    color=self.colors['wave-primary'],
+                ).stretch_to_fit_width(abs(objs['qubit-up'].obj.get_y(DOWN) - objs['qubit-down'].obj.get_y(UP))).rotate(90*DEGREES).next_to(objs['qubit-up'].obj, DOWN, buff=0)
+            ),
+            always_redraw(
+                lambda: FunctionGraph(
+                    lambda x: objs['tracker-amp-0'].get_value()*np.sin(objs['tracker-freq-0'].get_value()*x - self.time + PI),
+                    x_range=[-1, 1],
+                    color=self.colors['wave-secondary'],
+                ).stretch_to_fit_width(abs(objs['qubit-up'].obj.get_y(DOWN) - objs['qubit-down'].obj.get_y(UP))).rotate(90*DEGREES).next_to(objs['qubit-up'].obj, DOWN, buff=0)
+            ),
+        ])
+        
+        
+        ###
+        # Animations.
+        ###
+        self.play(Write(objs['text-exp-0'])) # Let's see example.
+        self.play(ReplacementTransform(objs['text-exp-0'], objs['text-exp-1'])) # This is a grid.
+        self.play(FadeIn(objs['grid-big-center'])) # Show big grid in center.
+        for m in objs['grid-big-legend']: # Show the legend elements.
+            self.play(FadeIn(m))
+        
+        self.play(ReplacementTransform(objs['text-exp-1'], objs['text-exp-2'])) # Player actions.
         self.play(
             Succession(
-                ApplyMethod(objs['grid-left'].move_player, a)
-                # for a in [MinigridAction.FORWARD, MinigridAction.FORWARD, MinigridAction.RIGHT, MinigridAction.FORWARD, MinigridAction.FORWARD, MinigridAction.LEFT, MinigridAction.FORWARD, MinigridAction.FORWARD]
-                # for a in minigrid_path_str_to_list('ffrfflff')
-                for a in [random.choice(list(MinigridAction)) for i in range(100)]
+                ApplyMethod(objs['grid-big-center'].move_player, a)
+                for a in minigrid_path_str_to_list('fff')
+            ),
+            run_time=2,
+        )
+        self.play(ReplacementTransform(objs['text-exp-2'], objs['text-exp-3'])) # Gains experiences.
+        self.play(
+            Succession(
+                ApplyMethod(objs['grid-big-center'].move_player, a)
+                for a in minigrid_path_str_to_list('frf')
+                # for a in minigrid_path_str_to_list('ffffrffff')
+            ),
+            run_time=2,
+        )
+        self.play(ReplacementTransform(objs['text-exp-3'], objs['text-exp-4'])) # To find the goal.
+        self.play(
+            Succession(
+                ApplyMethod(objs['grid-big-center'].move_player, a)
+                for a in minigrid_path_str_to_list('fff')
+                # for a in minigrid_path_str_to_list('ffffrffff')
+            ),
+            run_time=2,
+        )
+        self.play(
+            Flash(objs['grid-big-center'].get_goal_coord(), flash_radius=objs['grid-big-center'].get_goal().width*.75, color=GREEN),
+            rate_func=linear,
+        )
+        self.play(FadeOut(objs['grid-big-legend']))
+        self.play(FadeOut(objs['text-exp-4']))
+        self.play(FadeOut(objs['grid-big-center']))
+        
+        
+        
+        # Show two grids.
+        self.play(Write(objs['text-exp-5'])) # Now consider 2 environments.
+        self.play(
+            GrowFromCenter(objs['grid-big-left']),
+            GrowFromCenter(objs['grid-big-right']),
+        )
+        self.play(ReplacementTransform(objs['text-exp-5'], objs['text-exp-6'])) # Cannot communicate.
+        self.play(
+            Succession(
+                ApplyMethod(objs['grid-big-left'].obj.move_player, a)
+                for a in minigrid_path_str_to_list('fff')
             ),
             Succession(
-                ApplyMethod(objs['grid-right'].move_player, a)
-                # for a in [MinigridAction.RIGHT, MinigridAction.FORWARD, MinigridAction.RIGHT, MinigridAction.FORWARD, MinigridAction.FORWARD, MinigridAction.LEFT, MinigridAction.FORWARD, MinigridAction.LEFT]
-                # for a in minigrid_path_str_to_list('rfrfflfl')
-                for a in [random.choice(list(MinigridAction)) for i in range(100)]
+                ApplyMethod(objs['grid-big-right'].obj.move_player, a)
+                for a in minigrid_path_str_to_list('rfff')
             ),
-            run_time=4,
+            run_time=2,
         )
+        self.play(ReplacementTransform(objs['text-exp-6'], objs['text-exp-7'])) # Cannot coordinate.
+        self.play(
+            Succession(
+                ApplyMethod(objs['grid-big-left'].obj.move_player, a)
+                for a in minigrid_path_str_to_list('rfff')
+            ),
+            Succession(
+                ApplyMethod(objs['grid-big-right'].obj.move_player, a)
+                for a in minigrid_path_str_to_list('flfff')
+            ),
+            run_time=2,
+        )
+        
+        
+        
+        
+        
+        self.play(
+            ReplacementTransform(objs['grid-big-left'], objs['grid-small-left']),
+            ReplacementTransform(objs['grid-big-right'], objs['grid-small-right']),
+        )
+        self.play(ReplacementTransform(objs['text-exp-7'], objs['text-exp-8'])) # Using quantum.
+        self.play(
+            FadeIn(objs['qubit-left']),
+            FadeIn(objs['qubit-right']),
+            FadeIn(objs['wave-leftright']),
+        )
+        self.play(Write(objs['text-exp-9']))
+        self.play(
+            Succession(
+                ApplyMethod(objs['grid-small-left'].obj.move_player, a)
+                for a in minigrid_path_str_to_list('rffl')
+            ),
+            Succession(
+                ApplyMethod(objs['grid-small-right'].obj.move_player, a)
+                for a in minigrid_path_str_to_list('ffr')
+            ),
+            run_time=2,
+        )
+        self.play(Write(objs['text-exp-10']))
+        self.play(
+            Succession(
+                ApplyMethod(objs['grid-small-left'].obj.move_player, a)
+                for a in minigrid_path_str_to_list('ffffrff')
+            ),
+            Succession(
+                ApplyMethod(objs['grid-small-right'].obj.move_player, a)
+                for a in minigrid_path_str_to_list('fffflff')
+            ),
+            run_time=2,
+        )
+        self.play(
+            Flash(objs['grid-small-left'].obj.get_goal_coord(), flash_radius=objs['grid-small-left'].obj.get_goal().width*.75, color=GREEN),
+            Flash(objs['grid-small-right'].obj.get_goal_coord(), flash_radius=objs['grid-small-right'].obj.get_goal().width*.75, color=GREEN),
+            rate_func=linear,
+        )
+        
+        
+        
+        
+        self.play(
+            FadeOut(objs['text-exp-8']),
+            FadeOut(objs['text-exp-9']),
+            FadeOut(objs['text-exp-10']),
+        )
+        self.play(
+            objs['tracker-amp-0'].animate.set_value(0.1), # Make wave amplitudes smaller.
+            ReplacementTransform(objs['grid-small-left'], objs['grid-small-up']),
+            ReplacementTransform(objs['grid-small-right'], objs['grid-small-down']),
+            ReplacementTransform(objs['qubit-left'], objs['qubit-up']),
+            ReplacementTransform(objs['qubit-right'], objs['qubit-down']),
+            ReplacementTransform(objs['wave-leftright'], objs['wave-updown']),
+        )
+        # self.play(
+        #     Succession(
+        #         ApplyMethod(objs['grid-small-up'].obj.move_player, a)
+        #         for a in minigrid_path_str_to_list('ffffrff')
+        #     ),
+        #     Succession(
+        #         ApplyMethod(objs['grid-small-down'].obj.move_player, a)
+        #         for a in minigrid_path_str_to_list('fffflff')
+        #     ),
+        #     run_time=2,
+        # )
+        
+        
+        #########################################################
+        ###
+        # Result graphs.
+        ###
+        
+        # Data to display.
+        series: list[dict] = [
+            dict(
+                key='$\\mathtt{fCTDE}$',
+                blob='experiment_output/coingame_maa2c_mdp_fctde/20240501T185443/metrics-[0-9].json',
+                # color=[0.8666666666666667,0.5176470588235295,0.3215686274509804],
+                color=ORANGE.to_rgb(),
+                zorder=1,
+            ),
+            dict(
+                key='$\\mathtt{qfCTDE}$',
+                blob='experiment_output/coingame_maa2c_mdp_qfctde/20240503T151226/metrics-[0-9].json',
+                # color=[0.8549019607843137, 0.5450980392156862, 0.7647058823529411],
+                color=PINK.to_rgb(),
+                zorder=2,
+            ),
+            dict(
+                key='$\\mathtt{sCTDE}$',
+                blob='experiment_output/coingame_maa2c_mdp_sctde/20240418T133421/metrics-[0-9].json',
+                # color=[0.3333333333333333,0.6588235294117647,0.40784313725490196],
+                color=GREEN.to_rgb(),
+                zorder=3,
+            ),
+            dict(
+                key='$\\mathtt{eQMARL-}\Psi^{+}$',
+                blob='experiment_output/coingame_maa2c_mdp_eqmarl_psi+/20240501T152929/metrics-[0-9].json',
+                # color=[0.2980392156862745,0.4470588235294118,0.6901960784313725],
+                color=BLUE.to_rgb(),
+                zorder=4,
+            ),
+        ]
+        
+        # Create data series.
+        series_df: dict[str, pd.DataFrame] = {}
+        for series_kwargs in series:
+            key, blob = series_kwargs['key'], series_kwargs['blob']
+            
+            files = glob.glob(str(Path(blob).expanduser()))
+            assert len(files) > 0, f"No files found for blob: {blob}"
+            session_reward_history = []
+            session_metrics_history = []
+            for f in files:
+                reward_history, metrics_history = load_train_results(str(f))
+                session_reward_history.append(reward_history)
+                # session_metrics_history.append(metrics_history)
+                session_metrics_history.append({
+                    **metrics_history,
+                    # "reward": reward_history,
+                    "reward_mean": np.mean(np.array(reward_history), axis=-1),
+                    "reward_std": np.std(np.array(reward_history), axis=-1),
+                    "reward_max": np.max(np.array(reward_history), axis=-1),
+                    "reward_min": np.min(np.array(reward_history), axis=-1),
+                    })
+                
+            # Reshape to proper matrix.
+            session_reward_history = session_reward_history
+            session_reward_history = np.array(session_reward_history)
+            
+            df = pd.DataFrame(session_metrics_history)
+            series_df[key] = df
+        
+        # Create axis.
+        x_tick_interval = 500
+        y_tick_interval = 5
+        x_range = (0, 3000)
+        y_range = (-5, 30)
+        ax = Axes(
+            x_range=[x_range[0], x_range[1]+x_tick_interval, x_tick_interval], # +interval includes endpoints
+            y_range=[y_range[0], y_range[1]+y_tick_interval, y_tick_interval], # +interval includes endpoints
+            axis_config={'include_numbers': True},
+            tips=True,
+        )
+        gap_width = abs(config.frame_width/2 - objs['group-grid-small-up/down'].get_x(RIGHT))
+        ax.scale_to_fit_width(gap_width - 0.75).next_to(objs['group-grid-small-up/down'], RIGHT, buff=0.5).to_edge(DOWN, buff=0.5)
+        
+        # Create labels for axis.
+        labels = ax.get_axis_labels(
+            x_label=Text('Epoch', font_size=24),
+            y_label=Text('Score', font_size=24),
+        )
+        tracker_x_value = ValueTracker(x_range[0]) # For animating x-axis.
+        
+        # Bundle the axis and series graphs together.
+        group_graphs = VDict({
+            'ax': ax,
+            'labels': labels,
+            'series': VDict({}), # Keys will match series keys.
+            'legend': VDict({}), # Keys will match series keys.
+        })
+        
+        # Create plots for `mean` and `std` metrics.
+        metric_key_to_plot = 'undiscounted_reward' # Plot this metric.
+        for series_kwargs in series:
+            df = series_df[series_kwargs['key']]
+
+            df_arr = np.array(df.values.tolist())
+            i = list(df.columns).index(metric_key_to_plot) # Index of metric key within frame column.
+            data = df_arr[:,i,:] # Data to plot.
+            
+            # Plot type: 'mean-rolling'
+            metric_df = pd.DataFrame(np.mean(data, axis=0))
+            y = metric_df.rolling(10).mean().to_numpy().flatten()
+            x = np.arange(data.shape[-1]) # 0, 1, ..., N-1
+            
+            
+            # Remove all NaN values.
+            # Manim will linearly interpolate between gaps in data.
+            x_valid, y_valid = remove_nan(x, y)
+            
+            # Plot +/- standard deviation.
+            y_std = np.std(data, axis=0)# (3000,)
+            n = 1 # Default is 1 std above/below the data.
+            y_std_upper_values = y + y_std * n
+            y_std_lower_values = y - y_std * n
+            # Filter NaN.
+            x_std_upper_values, y_std_upper_values = remove_nan(x, y_std_upper_values)
+            x_std_lower_values, y_std_lower_values = remove_nan(x, y_std_lower_values)
+            
+            def make_line(
+                x_valid=x_valid,
+                y_valid=y_valid,
+                color=series_kwargs['color'],
+                zorder=series_kwargs['zorder'],
+                ):
+                """Generates a line plot from (x,y) data points.
+                
+                This function can be used with `always_redraw`.
+                
+                Function keyword arguments are set to allow data caching between frame calls.
+                """
+                # Check that we have data points with the mask, otherwise just return an empty `VGroup` object (this is really only a problem when the tracker is at the first data point).
+                mask = x_valid <= tracker_x_value.get_value()
+                if len(x_valid[mask]) > 0:
+                    zorder = zorder + len(series) + 1 # Offset Z index to ensure on top of shaded plots.
+                    graph_mean = ax.plot_line_graph(
+                        x_values=x_valid[mask],
+                        y_values=y_valid[mask],
+                        add_vertex_dots=False,
+                        line_color=ManimColor.from_rgb(color), # RGB color.
+                        stroke_width=2, # Default is 2.
+                    )
+                    graph_mean.set_z_index(zorder)
+                    return VGroup(*[
+                        graph_mean,
+                        Dot(ax.c2p(x_valid[mask][-1], y_valid[mask][-1]), color=ManimColor.from_rgb(color)).set_z_index(zorder), # Add a leading dot.
+                    ])
+                else:
+                    return VGroup()
+
+            def make_shaded(
+                x_std_upper_values=x_std_upper_values,
+                y_std_upper_values=y_std_upper_values,
+                x_std_lower_values=x_std_lower_values,
+                y_std_lower_values=y_std_lower_values,
+                color=series_kwargs['color'],
+                zorder=series_kwargs['zorder'],
+                ):
+                """Generates a plot of shaded regions representing +/- standard deviation around (x,y) data points.
+                
+                This function can be used with `always_redraw`.
+                
+                Function keyword arguments are set to allow data caching between frame calls.
+                """
+                # Check that we have data points with the mask, otherwise just return an empty `VGroup` object (this is really only a problem when the tracker is at the first data point).
+                if len(x_valid[x_valid <= tracker_x_value.get_value()]) > 0:
+                    y_std_upper_points = [ax.c2p(x, y) for x, y in zip(x_std_upper_values[x_valid <= tracker_x_value.get_value()], y_std_upper_values[x_valid <= tracker_x_value.get_value()])] # +1 std.
+                    y_std_lower_points = [ax.c2p(x, y) for x, y in zip(x_std_lower_values[x_valid <= tracker_x_value.get_value()], y_std_lower_values[x_valid <= tracker_x_value.get_value()])] # -1 std.
+                    # Create a `Polygon` using the upper and lower points.
+                    graph_std = Polygon(*y_std_upper_points, *reversed(y_std_lower_points), color=color, fill_opacity=0.3, stroke_width=0.1) # Points are added in counter-clockwise order. Upper points are ok as-is from increasing X order, but lower points need to be reversed.
+                    graph_std.set_z_index(zorder) # Set Z order (larger numbers on top).
+                    return graph_std
+                else:
+                    return VGroup()
+            
+            # Bundle the mean and std graphs for the current series.
+            graph_mean = always_redraw(make_line)
+            graph_std = always_redraw(make_shaded)
+            g = VDict({
+                'mean': graph_mean,
+                'std': graph_std,
+            })
+            
+            # Preserve graphs for current series.
+            group_graphs['series'][series_kwargs['key']] = g
+            
+            # Preserve legend elements for current series.
+            group_graphs['legend'][series_kwargs['key']] = VDict({
+                'glyph': Line(color=ManimColor.from_rgb(series_kwargs['color'])),
+                'label': Tex(series_kwargs['key'], font_size=18),
+            })
+
+        # Set the legend positioning.
+        for series_kwargs in series:
+            group_graphs['legend'][series_kwargs['key']]['glyph'].scale(0.25)
+            group_graphs['legend'][series_kwargs['key']]['label'].next_to(group_graphs['legend'][series_kwargs['key']]['glyph'], RIGHT, buff=0.2)
+        group_graphs['legend'].arrange(buff=0.5) # Arrange in a horizontal line.
+        group_graphs['legend'].next_to(group_graphs['ax'], UP).shift(RIGHT*.5)
+        # Add a bounding box to legend.
+        group_graphs['legend-box'] = SurroundingRectangle(group_graphs['legend'], color=GRAY_C, buff=0.2, corner_radius=0.1)
+        
+        # self.next_section('experiment-debug-stop', skip_animations=False) # DEBUG
+
+        # Animate the axis, axis-labels, and the legend-box.
+        gap_center = objs['group-grid-small-up/down'].get_right() + np.array([gap_width/2., 0, 0]) # Shift X direction.
+        objs['text-exp-11'] = Text("We ran several experiments", font_size=32).move_to(gap_center).shift(UP*2)
+        objs['text-exp-12'] = Text("to demonstrate the effectiveness of eQMARL", font_size=32).next_to(objs['text-exp-11'], DOWN)
+        objs['text-exp-13'] = Text("These are our results...", font_size=32).next_to(objs['text-exp-12'], DOWN*2)
+        self.play(Write(objs['text-exp-11']))
+        self.play(Write(objs['text-exp-12']))
+        self.play(Write(objs['text-exp-13']))
+        self.small_pause()
+        self.play(
+            ReplacementTransform(Group(objs['text-exp-11'], objs['text-exp-12'], objs['text-exp-13']), group_graphs['ax']),
+            FadeIn(group_graphs['labels']),
+        )
+        # self.play(Create(group_graphs['ax']), FadeIn(group_graphs['labels']), Write(group_graphs['legend-box']))
+
+        # self.next_section('experiment-debug-tmp', skip_animations=True) # DEBUG
+
+        objs['text-exp-14'] = Text("These are our baselines", font_size=32).next_to(group_graphs['legend-box'], UP)
+        self.play(Write(objs['text-exp-14']))
+        self.play(Write(group_graphs['legend-box']))
+        self.play(
+            Write(group_graphs['legend']['$\\mathtt{fCTDE}$']),
+            Write(group_graphs['legend']['$\\mathtt{qfCTDE}$']),
+            Write(group_graphs['legend']['$\\mathtt{sCTDE}$']),
+        )
+        self.small_pause()
+        # self.play(Write(group_graphs['legend']['$\\mathtt{fCTDE}$']))
+        # self.play(Write(group_graphs['legend']['$\\mathtt{qfCTDE}$']))
+        # self.play(Write(group_graphs['legend']['$\\mathtt{sCTDE}$']))
+        objs['text-exp-15'] = Text("and this is eQMARL", font_size=32).next_to(group_graphs['legend-box'], UP)
+        self.play(
+            ReplacementTransform(objs['text-exp-14'], objs['text-exp-15']),
+            Write(group_graphs['legend']['$\\mathtt{eQMARL-}\Psi^{+}$']),
+        )
+        self.small_pause()
+        self.play(FadeOut(objs['text-exp-15']))
+        
+        # Add all the plot series so they can be shown.
+        for series_kwargs in series:
+            self.add(group_graphs['series'][series_kwargs['key']]['mean'])
+
+        # # Animate the plots in a specific order.
+        # # Do not add std plots yet because we don't want those to show when the value tracker is updating.
+        # self.play(Write(group_graphs['legend-box']))
+        # for series_kwargs in series:
+        #     self.add(
+        #         group_graphs['series'][series_kwargs['key']]['mean'],
+        #         group_graphs['legend'],
+        #     )
+
+        # self.next_section('experiment-debug-tmp', skip_animations=True) # DEBUG
+
+        # Create a pointer for animating the epochs.
+        pointer = always_redraw(
+            lambda: Vector(UP).scale(0.5).next_to(
+                ax.x_axis.n2p(tracker_x_value.get_value()),
+                DOWN,
+            )
+        )
+        label = always_redraw(
+            lambda pointer=pointer: MathTex(f"e={tracker_x_value.get_value():.0f}", font_size=24).next_to(pointer, DOWN)
+        ).next_to(pointer, DOWN)
+        
+        objs['text-exp-16'] = Text("After 3,000 unique maze configurations...", font_size=32).next_to(group_graphs['legend-box'], UP)
+        self.play(Write(objs['text-exp-16']))
+        
+        # Add the pointer and label.
+        self.play(FadeIn(pointer), FadeIn(label))
+        
+        # Animate the plots from left-to-right by setting the tracker value to the end value.
+        self.play(
+            tracker_x_value.animate.set_value(x_range[-1]),
+            Succession(
+                *[ApplyMethod(objs['grid-small-up'].obj.move_player, a) for a in [random.choice(list(MinigridAction)) for _ in range(x_range[-1])]],
+                *[
+                    ApplyMethod(objs['grid-small-up'].obj.get_player().move_to, objs['grid-small-up'].obj.get_goal().get_center()),
+                ],
+            ),
+            Succession(
+                *[ApplyMethod(objs['grid-small-down'].obj.move_player, a) for a in [random.choice(list(MinigridAction)) for _ in range(x_range[-1])]],
+                *[
+                    ApplyMethod(objs['grid-small-down'].obj.get_player().move_to, objs['grid-small-down'].obj.get_goal().get_center()),
+                ],
+            ),
+            run_time=5,
+        )
+        
+        # Remove the pointer and tracker label.
+        self.play(FadeOut(pointer), FadeOut(label))
+        
+        objs['text-exp-17'] = MarkupText("The agents learn to achieve a <b>higher score</b>", font_size=32).next_to(group_graphs['legend-box'], UP)
+        self.play(ReplacementTransform(objs['text-exp-16'], objs['text-exp-17']))
+        self.play(group_graphs['series'][series_kwargs['key']]['mean'].animate.set_stroke(8), rate_func=there_and_back, run_time=0.5)
+        self.play(group_graphs['series'][series_kwargs['key']]['mean'].animate.set_stroke(8), rate_func=there_and_back, run_time=0.5)
+        self.medium_pause()
+        
+        
+        # Fade in the std plots.
+        objs['text-exp-18'] = MarkupText("with <b>lower standard deviation</b> than baselines", font_size=32).next_to(group_graphs['legend-box'], UP)
+        self.play(ReplacementTransform(objs['text-exp-17'], objs['text-exp-18']))
+        for series_kwargs in series:
+            self.play(FadeIn(group_graphs['series'][series_kwargs['key']]['std']), run_time=1)
+        # self.play(
+        #     *[FadeIn(group_graphs['series'][series_kwargs['key']]['std']) for series_kwargs in series],
+        #     run_time=4,
+        # )
+        
+        self.medium_pause()
+        
+        
+        # objs['text-exp-19'] = MarkupText("The key takeaways are:", font_size=32).to_edge(UP, buff=2)
+        # objs['text-exp-20'] = BulletedList()
+        # objs['text-exp-20'] = MarkupText("through quantum entanglement", font_size=32).next_to(objs['text-exp-19'], DOWN)
+        # objs['text-exp-21'] = MarkupText("via coupled experiences", font_size=32).next_to(objs['text-exp-20'], DOWN)
+        # objs['text-exp-21'] = MarkupText("agents learn to collaborate", font_size=32).next_to(objs['text-exp-20'], DOWN)
+        
+        objs['text-exp-19'] = MarkupText("The key takeaways are:", font_size=32).to_edge(UP, buff=2)
+        objs['text-exp-20'] = IconList(
+            *[
+                MarkupText("Quantum entangled learning can <b>improve performance</b> and <b>couple agent behavior</b>", font_size=28),
+                MarkupText("eQMARL <b>eliminates experience sharing</b>", font_size=28),
+                MarkupText("eQMARL can be deployed to <b>learn a diverse environments</b>", font_size=28),
+            ],
+            icon=Star(color=YELLOW, fill_opacity=0.5).scale(0.3),
+            buff=(.2, .5),
+            col_alignments='rl',
+        ).next_to(objs['text-exp-19'], DOWN, buff=0.5)
+        # Clear the screen of all objects created in this section.
+        mobjects_in_scene = list(set(self.mobjects) - set([self.eqmarl_acronym, self.attribution_text]))
+        # self.play(
+        #     ReplacementTransform(Group(*mobjects_in_scene), objs['text-exp-19'])
+        # )
+        self.play(
+            *[FadeOut(o) for o in mobjects_in_scene]
+        )
+        self.play(Write(objs['text-exp-19']))
+        for icon, text in objs['text-exp-20'].enumerate_rows():
+            self.play(Write(icon), Write(text))
+            self.wait(1)
+        
+        self.medium_pause()
+        
+        # Clear the screen of all objects created in this section.
+        mobjects_in_scene = list(set(self.mobjects) - set([self.eqmarl_acronym, self.attribution_text]))
+        self.play(
+            *[FadeOut(o) for o in mobjects_in_scene]
+        )
+        
+        #########################################################
         
     
     def section_results(self):
@@ -2002,6 +2607,7 @@ class DemoForICAB(PausableScene):
         self.play(Wiggle(img))
         
         self.wait(1)
+        
 
 
 def make_quantum_gate_1qubit(name: str, color: ManimColor = WHITE):
