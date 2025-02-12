@@ -117,7 +117,6 @@ class IconList(VGroup):
     def enumerate_rows(self):
         n_items = len(self.submobjects)
         for i in range(0, n_items-1, 2):
-            print(f"{i=}")
             yield (self.submobjects[i], self.submobjects[i+1])
 
 class MObjectWithLabel(Group):
@@ -567,8 +566,8 @@ class DemoForICAB(PausableScene):
         # Sections can be tested individually, to do this set `skip_animations=True` to turn off all other sections not used (note that the section will still be generated, allowing objects to move to their final position for use with future sections in the pipeline).
         sections: list[tuple[Callable, dict]] = [
             (self.section_title, dict(name="Title", skip_animations=False)), # First.
-            (self.section_scenario, dict(name="Scenario", skip_animations=False)),
-            (self.section_experiment, dict(name="Experiment", skip_animations=False)),
+            # (self.section_scenario, dict(name="Scenario", skip_animations=False)),
+            # (self.section_experiment, dict(name="Experiment", skip_animations=False)),
             (self.section_summary, dict(name="Summary", skip_animations=False)),
             (self.section_outro, dict(name="Outro", skip_animations=False)), # Last.
         ]
@@ -591,6 +590,7 @@ class DemoForICAB(PausableScene):
             eqmarl_acronym[5],
         ]
         self.eqmarl_acronym = eqmarl_acronym # Preserve the acronym for use outside of the section.
+        self.eqmarl_acronym.shift(UP)
 
         # Long form of title.
         eqmarl_full = Text("Entangled Quantum Multi-Agent Reinforcement Learning", t2c={'Quantum': PURPLE}, font_size=36)
@@ -604,10 +604,15 @@ class DemoForICAB(PausableScene):
         ]
         eqmarl_full.next_to(eqmarl_acronym, DOWN, buff=0.5)
         
-        self.subtitle_text = Text("Coordination without Communication", font_size=28)
+        self.subtitle_text = MarkupText("<i>Coordination without Communication</i>", font_size=28)
         self.subtitle_text.next_to(eqmarl_full, DOWN, buff=0.5)
         
-        self.attribution_text_full = Text("Alexander DeRieux & Walid Saad (2025)", font_size=24)
+        # self.attribution_text_full = Text("Alexander DeRieux & Walid Saad", font_size=22)
+        # self.attribution_text_full = Paragraph("Alexander DeRieux & Walid Saad\nPublished in ICLR 2025", font_size=22, alignment='center', line_spacing=0.7)
+        self.attribution_text_full = VGroup(
+            Text("Alexander DeRieux & Walid Saad", font_size=22),
+            MarkupText("Published in <i>The Thirteenth International Conference on Learning Representations (ICLR)</i> 2025", font_size=20),
+        ).arrange(DOWN, buff=0.2)
         self.attribution_text_full.next_to(self.subtitle_text, DOWN, buff=0.5)
         
         self.attribution_text = Text("A. DeRieux & W. Saad (2025)", font_size=12)
@@ -1527,8 +1532,13 @@ class DemoForICAB(PausableScene):
         img = SegnoQRCodeImageMobject(qr, scale=100, dark=GRAY_A.to_hex(), finder_dark=PURPLE.to_hex(), border=0, light=None).scale(0.1)
         
         texts = {}
-        texts['subtitle'] = Text("Coordination without Communication", font_size=28)
-        texts['attribution'] = Text("Alexander DeRieux & Walid Saad (2025)", font_size=24)
+        # texts['subtitle'] = Text("Coordination without Communication", font_size=28)
+        texts['subtitle'] = MarkupText("<i>Coordination without Communication</i>", font_size=28)
+        # texts['attribution'] = Text("Alexander DeRieux & Walid Saad (2025)", font_size=24)
+        texts['attribution'] = VGroup(
+            Text("Alexander DeRieux & Walid Saad", font_size=22),
+            MarkupText("Published in <i>The Thirteenth International Conference on Learning Representations (ICLR)</i> 2025", font_size=20),
+        ).arrange(DOWN, buff=0.2)
         texts['arxiv'] = Text("Paper is available on arXiv", font_size=20)
         
         # Transform summary list into watermark at top-left.
@@ -1554,4 +1564,4 @@ class DemoForICAB(PausableScene):
         self.play(ReplacementTransform(self.attribution_text, texts['attribution']))
         
         # Wait.
-        self.long_pause()
+        self.long_pause(frozen_frame=False)
