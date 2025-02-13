@@ -1,5 +1,6 @@
 ipykernel
 manim
+manim-voiceover[azure,gtts]
 pandas
 segno
 qrcode-artistic
