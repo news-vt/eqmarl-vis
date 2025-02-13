@@ -13,6 +13,7 @@ from manim import *
 from manim.typing import *
 from manim_voiceover import VoiceoverScene
 from manim_voiceover.services.gtts import GTTSService
+from manim_voiceover.services.coqui import CoquiService
 import segno
 
 # config.disable_caching = True
@@ -545,12 +546,22 @@ class PausableScene(Scene):
     def long_pause(self, duration=5, **kwargs):
         self.wait(duration, **kwargs)
 
+from TTS.api import TTS
 
 class DemoForICAB(PausableScene, VoiceoverScene):
     def construct(self):
         # Configure AI text-to-speech service.
         # See Manim Voiceover quickstart for details: https://voiceover.manim.community/en/latest/quickstart.html
-        self.set_speech_service(GTTSService())
+        self.set_speech_service(GTTSService(
+            lang="en",
+            tld="com",
+            global_speed=1.15,
+            transcription_model='base',
+        ))
+        # self.set_speech_service(CoquiService(
+        #     global_speed=1.15,
+        #     transcription_model='base',
+        # ))
         
         # Colorway.
         self.colors = {
@@ -627,15 +638,27 @@ class DemoForICAB(PausableScene, VoiceoverScene):
         eqmarl_glyphs = list(zip(eqmarl_acronym_glyphs, eqmarl_full_glyphs))
         
         # Animate the title.
-        self.play(FadeIn(eqmarl_acronym))
-        self.small_pause(frozen_frame=False)
-        self.play(Write(eqmarl_full))
-        self.small_pause(frozen_frame=False)
-        self.play(Write(self.subtitle_text))
-        self.small_pause(frozen_frame=False)
+        with self.voiceover(
+            text="""Welcome to our short video presentation for our <bookmark mark='1'/>recently published work titled eQMARL, which stands for <bookmark mark='2'/>Entangled Quantum Multi-Agent Reinforcement Learning.
+            """
+        ) as tracker:
+            self.wait_until_bookmark('1')
+            self.play(FadeIn(eqmarl_acronym), run_time=tracker.time_until_bookmark('2'))
+            # self.wait_until_bookmark('2')
+            self.play(Write(eqmarl_full))
         
-        # self.play(Create(self.attribution_text))
-        self.play(Write(self.attribution_text_full))
+        with self.voiceover(
+            text="""The key point of our work is that through quantum entanglement eQMARL enables swarms of AI agents to <bookmark mark='1'/>coordinate without direct communication.
+            """
+        ) as tracker:
+            self.wait_until_bookmark('1')
+            self.play(Write(self.subtitle_text))
+
+        with self.voiceover(
+            text="""Our work has been published in The Thirteenth International Conference on Learning Representations.
+            """
+        ) as tracker:
+            self.play(Write(self.attribution_text_full))
         
         self.medium_pause(frozen_frame=False)
         
@@ -814,12 +837,12 @@ class DemoForICAB(PausableScene, VoiceoverScene):
         # Text objects.
         texts = {}
         # texts['imagine-0'] = Text("Imagine two separate wildfire environments", font_size=32).to_edge(UP, buff=1)
-        texts['imagine-0'] = MarkupText(f'Imagine two separate <span fgcolor="{self.colors['observation'].to_hex()}">wildfire environments</span>', font_size=32).to_edge(UP, buff=1)
+        texts['imagine-0'] = MarkupText(f'Imagine two separate <span fgcolor="{self.colors["observation"].to_hex()}">wildfire environments</span>', font_size=32).to_edge(UP, buff=1)
         # texts['imagine-1'] = Text("and two AI-powered drones", font_size=32).to_edge(UP, buff=1)
         # texts['imagine-1'] = Text("and two AI-powered drones", font_size=32).next_to(texts['imagine-0'], DOWN)
         texts['imagine-1'] = MarkupText(f'and two <span fgcolor="{PINK.to_hex()}">AI-powered drones</span>', font_size=32).next_to(texts['imagine-0'], DOWN)
         # texts['imagine-2'] = Paragraph("The drones are tasked with\nextinguishing the environment fires", font_size=32, alignment='center').to_edge(UP, buff=1.5)
-        texts['imagine-2'] = MarkupText(f'tasked with <span fgcolor="{self.colors['action'].to_hex()}">extinguishing</span> the environment fires', font_size=32).next_to(texts['imagine-1'], DOWN)
+        texts['imagine-2'] = MarkupText(f'tasked with <span fgcolor="{self.colors["action"].to_hex()}">extinguishing</span> the environment fires', font_size=32).next_to(texts['imagine-1'], DOWN)
         texts['ideal-0'] = MarkupText(f"In an <u>ideal</u> scenario", font_size=32).to_edge(UP, buff=1)
         # texts['ideal-1'] = Text("The drones could learn the task faster", font_size=24).next_to(arrows['ideal-com-lr'], UP)
         # texts['ideal-2'] = MarkupText(f"by cooperatively sharing their <span fgcolor=\"{self.colors['observation'].to_hex()}\">experiences</span>", font_size=24).next_to(arrows['ideal-com-rl'], DOWN)
