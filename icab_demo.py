@@ -11,6 +11,8 @@ from typing import Any, Callable, Iterable
 
 from manim import *
 from manim.typing import *
+from manim_voiceover import VoiceoverScene
+from manim_voiceover.services.gtts import GTTSService
 import segno
 
 # config.disable_caching = True
@@ -544,8 +546,11 @@ class PausableScene(Scene):
         self.wait(duration, **kwargs)
 
 
-class DemoForICAB(PausableScene):
+class DemoForICAB(PausableScene, VoiceoverScene):
     def construct(self):
+        # Configure AI text-to-speech service.
+        # See Manim Voiceover quickstart for details: https://voiceover.manim.community/en/latest/quickstart.html
+        self.set_speech_service(GTTSService())
         
         # Colorway.
         self.colors = {
@@ -566,10 +571,10 @@ class DemoForICAB(PausableScene):
         # Sections can be tested individually, to do this set `skip_animations=True` to turn off all other sections not used (note that the section will still be generated, allowing objects to move to their final position for use with future sections in the pipeline).
         sections: list[tuple[Callable, dict]] = [
             (self.section_title, dict(name="Title", skip_animations=False)), # First.
-            (self.section_scenario, dict(name="Scenario", skip_animations=False)),
-            (self.section_experiment, dict(name="Experiment", skip_animations=False)),
-            (self.section_summary, dict(name="Summary", skip_animations=False)),
-            (self.section_outro, dict(name="Outro", skip_animations=False)), # Last.
+            # (self.section_scenario, dict(name="Scenario", skip_animations=False)),
+            # (self.section_experiment, dict(name="Experiment", skip_animations=False)),
+            # (self.section_summary, dict(name="Summary", skip_animations=False)),
+            # (self.section_outro, dict(name="Outro", skip_animations=False)), # Last.
         ]
         for method, section_kwargs in sections:
             self.next_section(**section_kwargs)
