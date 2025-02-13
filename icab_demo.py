@@ -565,11 +565,11 @@ class DemoForICAB(PausableScene):
         # Each section should cleanup any objects after itself if they are not to be used again.
         # Sections can be tested individually, to do this set `skip_animations=True` to turn off all other sections not used (note that the section will still be generated, allowing objects to move to their final position for use with future sections in the pipeline).
         sections: list[tuple[Callable, dict]] = [
-            (self.section_title, dict(name="Title", skip_animations=False)), # First.
-            # (self.section_scenario, dict(name="Scenario", skip_animations=False)),
+            (self.section_title, dict(name="Title", skip_animations=True)), # First.
+            (self.section_scenario, dict(name="Scenario", skip_animations=False)),
             # (self.section_experiment, dict(name="Experiment", skip_animations=False)),
-            (self.section_summary, dict(name="Summary", skip_animations=False)),
-            (self.section_outro, dict(name="Outro", skip_animations=False)), # Last.
+            # (self.section_summary, dict(name="Summary", skip_animations=False)),
+            # (self.section_outro, dict(name="Outro", skip_animations=False)), # Last.
         ]
         for method, section_kwargs in sections:
             self.next_section(**section_kwargs)
@@ -808,11 +808,19 @@ class DemoForICAB(PausableScene):
         
         # Text objects.
         texts = {}
-        texts['imagine-0'] = Text("Imagine two separate environments", font_size=32).to_edge(UP, buff=1)
-        texts['imagine-1'] = Text("and two AI-powered drones", font_size=32).to_edge(UP, buff=1)
+        # texts['imagine-0'] = Text("Imagine two separate wildfire environments", font_size=32).to_edge(UP, buff=1)
+        texts['imagine-0'] = MarkupText(f'Imagine two separate <span fgcolor="{self.colors['observation'].to_hex()}">wildfire environments</span>', font_size=32).to_edge(UP, buff=1)
+        # texts['imagine-1'] = Text("and two AI-powered drones", font_size=32).to_edge(UP, buff=1)
+        # texts['imagine-1'] = Text("and two AI-powered drones", font_size=32).next_to(texts['imagine-0'], DOWN)
+        texts['imagine-1'] = MarkupText(f'and two <span fgcolor="{PINK.to_hex()}">AI-powered drones</span>', font_size=32).next_to(texts['imagine-0'], DOWN)
+        # texts['imagine-2'] = Paragraph("The drones are tasked with\nextinguishing the environment fires", font_size=32, alignment='center').to_edge(UP, buff=1.5)
+        texts['imagine-2'] = MarkupText(f'tasked with <span fgcolor="{self.colors['action'].to_hex()}">extinguishing</span> the environment fires', font_size=32).next_to(texts['imagine-1'], DOWN)
         texts['ideal-0'] = MarkupText(f"In an <u>ideal</u> scenario", font_size=32).to_edge(UP, buff=1)
-        texts['ideal-1'] = Text("The drones could learn", font_size=24).next_to(arrows['ideal-com-lr'], UP)
-        texts['ideal-2'] = MarkupText(f"by directly sharing their <span fgcolor=\"{self.colors['observation'].to_hex()}\">experiences</span>", font_size=24).next_to(arrows['ideal-com-rl'], DOWN)
+        # texts['ideal-1'] = Text("The drones could learn the task faster", font_size=24).next_to(arrows['ideal-com-lr'], UP)
+        # texts['ideal-2'] = MarkupText(f"by cooperatively sharing their <span fgcolor=\"{self.colors['observation'].to_hex()}\">experiences</span>", font_size=24).next_to(arrows['ideal-com-rl'], DOWN)
+        texts['ideal-1'] = MarkupText(f"The drones can learn the task more efficiently", font_size=24).next_to(arrows['ideal-com-lr'], UP)
+        texts['ideal-2'] = MarkupText(f"by cooperatively sharing their <span fgcolor=\"{self.colors['observation'].to_hex()}\">experiences</span>", font_size=24).next_to(arrows['ideal-com-rl'], DOWN)
+        ####
         texts['nocom-0'] = Text("But in certain environment conditions", font_size=32).to_edge(UP, buff=1)
         texts['nocom-1'] = MarkupText(f"this sharing of <span fgcolor=\"{self.colors['observation'].to_hex()}\">local information</span> is <span fgcolor=\"{self.colors['no'].to_hex()}\">not possible</span>", font_size=32).next_to(texts['nocom-0'], DOWN) # to_edge(UP, buff=2) # Below above.
         texts['quantum-0'] = Text("However...", font_size=32).to_edge(UP, buff=1)
@@ -825,12 +833,39 @@ class DemoForICAB(PausableScene):
         texts['quantum-7'] = MarkupText(f"<span fgcolor=\"{self.colors['action'].to_hex()}\">Coordination</span> <u>without</u> <span fgcolor=\"{RED.to_hex()}\">Communication</span>", font_size=28).next_to(texts['quantum-6'], DOWN)
         
         
+        # Image of rain drops for drone action.
+        objs['rain-left'] = ImageMobject("assets/images/rain-drops.png").scale(0.25).next_to(objs['drone-left'], DOWN, buff=-0.2).rotate(30*DEGREES)
+        objs['rain-right'] = ImageMobject("assets/images/rain-drops.png").scale(0.25).next_to(objs['drone-right'], DOWN, buff=-0.2).rotate(30*DEGREES)
+        
+        
+        
         # Imagine.
         self.play(Write(texts['imagine-0']))
         self.play(FadeIn(objs['env-left']), FadeIn(objs['env-right']))
-        self.play(ReplacementTransform(texts['imagine-0'], texts['imagine-1']))
+        # self.play(ReplacementTransform(texts['imagine-0'], texts['imagine-1']))
+        self.play(Write(texts['imagine-1']))
         self.play(FadeIn(objs['drone-left']), FadeIn(objs['drone-right']))
-        self.play(FadeOut(texts['imagine-1']))
+        # self.play(FadeOut(texts['imagine-1']))
+        self.play(Write(texts['imagine-2']))
+        
+        # Animate the rain drops.
+        n = 3
+        for i in range(n):
+            objs['rain-left'].save_state()
+            objs['rain-right'].save_state()
+            self.play(
+                objs['rain-left'].animate.move_to(objs['env-left'].get_center()).set_opacity(0),
+                objs['rain-right'].animate.move_to(objs['env-right'].get_center()).set_opacity(0),
+            )
+            if i < n-1: # Do not restore last iteraiton.
+                objs['rain-left'].restore()
+                objs['rain-right'].restore()
+            
+        self.small_pause(frozen_frame=False)
+        # self.medium_pause(frozen_frame=False)
+        # self.play(ReplacementTransform(texts['imagine-1'], texts['imagine-2']))
+        # self.play(FadeOut(texts['imagine-2']))
+        self.play(*[FadeOut(o) for k,o in texts.items() if 'imagine' in k])
         
         # Ideal.
         self.play(Write(texts['ideal-0']))
