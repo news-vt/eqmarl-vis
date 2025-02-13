@@ -12,3 +12,6 @@ icab-2k:
 
 icab-4k:
 	manim icab_demo.py DemoForICAB -qk
+
+icab-clean-partial:
+	rm -rf media/videos/icab_demo/**/partial_movie_files
