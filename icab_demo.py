@@ -1067,7 +1067,7 @@ class DemoForICAB(PausableScene, CustomVoiceoverScene):
         # Text objects.
         objs['text-exp-0'] = Text("Let's see an illustrative example", font_size=32)
         objs['text-exp-1'] = Tex(r"This is an $5\times5$ maze grid environment for 1 drone", font_size=32).to_edge(UP, buff=1.5)
-        objs['text-exp-2'] = Tex(r"The drone can take actions $a \in \{\textrm{left}, \textrm{right}, \textrm{forward}\}$ to move in the grid", font_size=32).to_edge(UP, buff=1.5)
+        objs['text-exp-2'] = Tex(r"The drone can take actions $a \in \{\textrm{left}, \textrm{right}, \textrm{forward}\}$ to move in the maze", font_size=32).to_edge(UP, buff=1.5)
         objs['text-exp-3'] = Text("As the drone moves it gathers experiences", font_size=32).to_edge(UP, buff=1.5)
         objs['text-exp-4'] = Text("The drone learns from experiences to find the goal", font_size=32).to_edge(UP, buff=1.5)
         objs['text-exp-5'] = Text("Now consider 2 parallel environments with different drones", font_size=32).to_edge(UP, buff=1.5)
@@ -1092,8 +1092,14 @@ class DemoForICAB(PausableScene, CustomVoiceoverScene):
         # MiniGrid legend for big grid.
         objs['grid-big-legend'] = Group(*[
             MObjectWithLabel(
+                obj=objs['grid-big-center'].assets['player'].copy().scale(0.25),
+                label=Text("Drone", font_size=18),
+                buff=0.2,
+                direction=RIGHT,
+            ),
+            MObjectWithLabel(
                 obj=objs['grid-big-center'].assets['grid-empty'].copy().scale(0.25),
-                label=Text("Empty grid square", font_size=18),
+                label=Text("Safe grid square", font_size=18),
                 buff=0.2,
                 direction=RIGHT,
             ),
@@ -1106,12 +1112,6 @@ class DemoForICAB(PausableScene, CustomVoiceoverScene):
             MObjectWithLabel(
                 obj=objs['grid-big-center'].assets['grid-goal'].copy().scale(0.25),
                 label=Text("Goal", font_size=18),
-                buff=0.2,
-                direction=RIGHT,
-            ),
-            MObjectWithLabel(
-                obj=objs['grid-big-center'].assets['player'].copy().scale(0.25),
-                label=Text("Drone", font_size=18),
                 buff=0.2,
                 direction=RIGHT,
             ),
@@ -1261,74 +1261,124 @@ class DemoForICAB(PausableScene, CustomVoiceoverScene):
         
         # return
         
-        self.play(ReplacementTransform(objs['text-exp-0'], objs['text-exp-1'])) # This is a grid.
-        self.play(FadeIn(objs['grid-big-center'])) # Show big grid in center.
-        for m in objs['grid-big-legend']: # Show the legend elements.
-            self.play(FadeIn(m))
+        with self.voiceover(text="This is a five-by-five maze environment for a <bookmark mark='1'/> drone, consisting of <bookmark mark='2'/> safe grid squares, <bookmark mark='3'/> lava hazards, <bookmark mark='4'/> and a goal.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+            self.play(ReplacementTransform(objs['text-exp-0'], objs['text-exp-1'])) # This is a grid.
+            self.play(FadeIn(objs['grid-big-center'])) # Show big grid in center.
+            for i, m in enumerate(objs['grid-big-legend']): # Show the legend elements.
+                self.wait_until_bookmark(str(i+1))
+                self.play(FadeIn(m))
         
-        self.play(ReplacementTransform(objs['text-exp-1'], objs['text-exp-2'])) # Player actions.
-        self.play(
-            objs['grid-big-center'].animate_actions(*minigrid_path_str_to_list('fff')),
-            run_time=2,
-        )
-        self.play(ReplacementTransform(objs['text-exp-2'], objs['text-exp-3'])) # Gains experiences.
-        self.play(
-            objs['grid-big-center'].animate_actions(*minigrid_path_str_to_list('frf')),
-            run_time=2,
-        )
-        self.play(ReplacementTransform(objs['text-exp-3'], objs['text-exp-4'])) # To find the goal.
-        self.play(
-            objs['grid-big-center'].animate_actions(*minigrid_path_str_to_list('fff')),
-            run_time=2,
-        )
-        self.play(FadeOut(objs['grid-big-legend']))
-        self.play(FadeOut(objs['text-exp-4']))
-        self.play(FadeOut(objs['grid-big-center']))
+        with self.voiceover(text="The drone can move through the maze by taking actions left, right, and forward.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+            self.play(ReplacementTransform(objs['text-exp-1'], objs['text-exp-2'])) # Player actions.
+            self.play(
+                objs['grid-big-center'].animate_actions(*minigrid_path_str_to_list('fff')),
+                run_time=2,
+            )
+
+        with self.voiceover(text="As the drone moves it gathers experiences.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+            self.play(ReplacementTransform(objs['text-exp-2'], objs['text-exp-3'])) # Gains experiences.
+            self.play(
+                objs['grid-big-center'].animate_actions(*minigrid_path_str_to_list('frf')),
+                run_time=2,
+            )
         
-        
+        with self.voiceover(text="And the drone learns from these experiences to find the goal.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+            self.play(ReplacementTransform(objs['text-exp-3'], objs['text-exp-4'])) # To find the goal.
+            self.play(
+                objs['grid-big-center'].animate_actions(*minigrid_path_str_to_list('fff')),
+                run_time=2,
+            )
+        self.play(FadeOut(objs['grid-big-legend']), FadeOut(objs['text-exp-4']), FadeOut(objs['grid-big-center']))
         
         # Show two grids.
-        self.play(Write(objs['text-exp-5'])) # Now consider 2 environments.
-        self.play(
-            GrowFromCenter(objs['grid-big-left']),
-            GrowFromCenter(objs['grid-big-right']),
-        )
-        self.play(ReplacementTransform(objs['text-exp-5'], objs['text-exp-6'])) # Cannot communicate.
-        self.play(
-            objs['grid-big-left'].obj.animate_actions(*minigrid_path_str_to_list('fff')),
-            objs['grid-big-right'].obj.animate_actions(*minigrid_path_str_to_list('rff')),
-            run_time=2,
-        )
-        self.play(ReplacementTransform(objs['text-exp-6'], objs['text-exp-7'])) # Cannot coordinate.
-        self.play(
-            objs['grid-big-left'].obj.animate_actions(*minigrid_path_str_to_list('rf')),
-            objs['grid-big-right'].obj.animate_actions(*minigrid_path_str_to_list('fl')),
-            run_time=2,
-        )
+        with self.voiceover(text="Now let's consider an extension of this scenario with two parallel maze environments with different drones in each.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+            self.play(Write(objs['text-exp-5'])) # Now consider 2 environments.
+            self.play(
+                GrowFromCenter(objs['grid-big-left']),
+                GrowFromCenter(objs['grid-big-right']),
+            )
+        orig_left = objs['grid-big-left'].copy()
+        orig_right = objs['grid-big-right'].copy()
+        with self.voiceover(text="The drones are not able to directly communicate with each other, due to the gap between them.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+            self.play(ReplacementTransform(objs['text-exp-5'], objs['text-exp-6'])) # Cannot communicate.
+            self.play(
+                objs['grid-big-left'].obj.animate_actions(*minigrid_path_str_to_list('fff')),
+                objs['grid-big-right'].obj.animate_actions(*minigrid_path_str_to_list('rff')),
+                run_time=2,
+            )
+        with self.voiceover(text="From a learning perspective, this means that they are not able to coordinate using shared experiences. This is a problem because, we see that drone A fell into the lava, and the information it learned could be helpful for drone B to learn to avoid the hazard, but the lack of direct communication means that drone B will not know what happened and must experience the hazard itself.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+            self.play(ReplacementTransform(objs['text-exp-6'], objs['text-exp-7'])) # Cannot coordinate.
+            # self.play(
+            #     objs['grid-big-left'].obj.animate_actions(*minigrid_path_str_to_list('rf')),
+            #     objs['grid-big-right'].obj.animate_actions(*minigrid_path_str_to_list('fl')),
+            #     run_time=2,
+            # )
+            path_left = 'rf' # Short abbreviated path.
+            path_right = 'fl' # Short abbreviated path.
+            while tracker.get_remaining_duration() > 0:
+                self.play(
+                    objs['grid-big-left'].obj.animate_actions(*minigrid_path_str_to_list(path_left)),
+                    objs['grid-big-right'].obj.animate_actions(*minigrid_path_str_to_list(path_right)),
+                    run_time=2,
+                )
+                if tracker.get_remaining_duration() > 0:
+                    self.play(
+                        ReplacementTransform(objs['grid-big-left'], orig_left),
+                        ReplacementTransform(objs['grid-big-right'], orig_right),
+                    )
+                    objs['grid-big-left'] = orig_left
+                    objs['grid-big-right'] = orig_right
+                    orig_left = objs['grid-big-left'].copy()
+                    orig_right = objs['grid-big-right'].copy()
+                    path_left = 'fffrf' # Full path.
+                    path_right = 'rfffl' # Full path.
         
-        
-        self.play(
-            ReplacementTransform(objs['grid-big-left'], objs['grid-small-left']),
-            ReplacementTransform(objs['grid-big-right'], objs['grid-small-right']),
-        )
-        self.play(ReplacementTransform(objs['text-exp-7'], objs['text-exp-8'])) # Using quantum.
-        self.play(
-            FadeIn(objs['qubit-left']),
-            FadeIn(objs['qubit-right']),
-            FadeIn(objs['wave-leftright']),
-        )
-        self.play(Write(objs['text-exp-9']))
-        self.play(
-            objs['grid-small-left'].obj.animate_actions(*minigrid_path_str_to_list('rffl')),
-            objs['grid-small-right'].obj.animate_actions(*minigrid_path_str_to_list('ffr')),
-            run_time=2,
-        )
-        self.play(Write(objs['text-exp-10']))
-        self.play(
-            objs['grid-small-left'].obj.animate_actions(*minigrid_path_str_to_list('ffffrff')),
-            objs['grid-small-right'].obj.animate_actions(*minigrid_path_str_to_list('fffflff')),
-            run_time=2,
-        )
+        with self.voiceover(text="On the other hand, quantum entanglement can bridge the gap between the drones.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+            self.play(
+                ReplacementTransform(objs['grid-big-left'], objs['grid-small-left']),
+                ReplacementTransform(objs['grid-big-right'], objs['grid-small-right']),
+            )
+            self.play(ReplacementTransform(objs['text-exp-7'], objs['text-exp-8'])) # Using quantum.
+            self.play(
+                FadeIn(objs['qubit-left']),
+                FadeIn(objs['qubit-right']),
+                FadeIn(objs['wave-leftright']),
+            )
+        orig_left = objs['grid-small-left'].copy()
+        orig_right = objs['grid-small-right'].copy()
+        with self.voiceover(text="In effect, coupling their unique local experiences.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+            self.play(Write(objs['text-exp-9']))
+            self.play(
+                objs['grid-small-left'].obj.animate_actions(*minigrid_path_str_to_list('rffl')),
+                objs['grid-small-right'].obj.animate_actions(*minigrid_path_str_to_list('ffr')),
+                run_time=2,
+            )
+        with self.voiceover(text="Which allows them to learn optimal actions without the need for direct communication. As you can see from this example, the drones did not fall into the lava because their choice of actions was influenced by both their own local experiences and the implicit experience of the other drone via quantum entanglement.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+            self.play(Write(objs['text-exp-10']))
+            path_left = 'ffffrff' # Short abbreviated path.
+            path_right = 'fffflff' # Short abbreviated path.
+            while tracker.get_remaining_duration() > 0:
+                self.play(
+                    objs['grid-small-left'].obj.animate_actions(*minigrid_path_str_to_list(path_left)),
+                    objs['grid-small-right'].obj.animate_actions(*minigrid_path_str_to_list(path_right)),
+                    run_time=2,
+                )
+                if tracker.get_remaining_duration() > 0:
+                    self.play(
+                        ReplacementTransform(objs['grid-small-left'], orig_left),
+                        ReplacementTransform(objs['grid-small-right'], orig_right),
+                    )
+                    objs['grid-small-left'] = orig_left
+                    objs['grid-small-right'] = orig_right
+                    orig_left = objs['grid-small-left'].copy()
+                    orig_right = objs['grid-small-right'].copy()
+                    path_left = 'rfflffffrff' # Full path.
+                    path_right = 'ffrfffflff' # Full path.
+            # self.play(
+            #     objs['grid-small-left'].obj.animate_actions(*minigrid_path_str_to_list('ffffrff')),
+            #     objs['grid-small-right'].obj.animate_actions(*minigrid_path_str_to_list('fffflff')),
+            #     run_time=2,
+            # )
         
         self.play(
             FadeOut(objs['text-exp-8']),
@@ -1343,7 +1393,6 @@ class DemoForICAB(PausableScene, CustomVoiceoverScene):
             ReplacementTransform(objs['qubit-right'], objs['qubit-down']),
             ReplacementTransform(objs['wave-leftright'], objs['wave-updown']),
         )
-        
         
         ###
         # Result graphs.
