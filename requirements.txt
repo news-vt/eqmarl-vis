@@ -1,6 +1,11 @@
 ipykernel
 manim
-manim-voiceover[azure,gtts]
+# manim-voiceover[azure,gtts]
+manim-voiceover[azure,gtts,transcribe,coqi]
+# manim-voiceover[all]
+# manim-voiceover[transcribe]
+# TTS for manim-voiceover coqi.
+TTS
 pandas
 segno
 qrcode-artistic
