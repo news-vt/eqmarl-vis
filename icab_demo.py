@@ -632,10 +632,10 @@ class DemoForICAB(PausableScene, CustomVoiceoverScene):
         # Sections can be tested individually, to do this set `skip_animations=True` to turn off all other sections not used (note that the section will still be generated, allowing objects to move to their final position for use with future sections in the pipeline).
         sections: list[tuple[Callable, dict]] = [
             (self.section_title, dict(name="Title", skip_animations=False)), # First.
-            (self.section_scenario, dict(name="Scenario", skip_animations=False)),
-            (self.section_experiment, dict(name="Experiment", skip_animations=False)),
-            # (self.section_summary, dict(name="Summary", skip_animations=False)),
-            # (self.section_outro, dict(name="Outro", skip_animations=False)), # Last.
+            # (self.section_scenario, dict(name="Scenario", skip_animations=False)),
+            # (self.section_experiment, dict(name="Experiment", skip_animations=False)),
+            (self.section_summary, dict(name="Summary", skip_animations=False)),
+            (self.section_outro, dict(name="Outro", skip_animations=False)), # Last.
         ]
         for method, section_kwargs in sections:
             self.next_section(**section_kwargs)
@@ -693,7 +693,7 @@ class DemoForICAB(PausableScene, CustomVoiceoverScene):
             text="""Welcome to our short video presentation for our <bookmark mark='1'/>recently published work titled eQMARL, which stands for <bookmark mark='2'/>Entangled Quantum Multi-Agent Reinforcement Learning.
             """
         ) as tracker:
-            self.wait_until_bookmark('1')
+            self.wait_until_bookmark('1', frozen_frame=False)
             self.play(FadeIn(eqmarl_acronym), run_time=tracker.time_until_bookmark('2'))
             # self.wait_until_bookmark('2')
             self.play(Write(eqmarl_full))
@@ -702,7 +702,7 @@ class DemoForICAB(PausableScene, CustomVoiceoverScene):
             text="""The key point of our work is that through quantum entanglement eQMARL enables swarms of AI agents to <bookmark mark='1'/>coordinate without direct communication.
             """
         ) as tracker:
-            self.wait_until_bookmark('1')
+            self.wait_until_bookmark('1', frozen_frame=False)
             self.play(Write(self.subtitle_text))
 
         with self.voiceover(
@@ -926,15 +926,15 @@ class DemoForICAB(PausableScene, CustomVoiceoverScene):
         ) as tracker:
             self.play(Write(texts['imagine-0']), run_time=tracker.time_until_bookmark('1', limit=1))
             self.play(FadeIn(objs['env-left']), FadeIn(objs['env-right']), run_time=tracker.time_until_bookmark('2', limit=1))
-            self.wait_until_bookmark('2')
+            self.wait_until_bookmark('2', frozen_frame=False)
             # self.play(Write(texts['imagine-1']))
             self.play(Write(texts['imagine-1']), FadeIn(objs['drone-left']), FadeIn(objs['drone-right']), run_time=tracker.time_until_bookmark('3', limit=1))
             
-            self.wait_until_bookmark('3')
+            self.wait_until_bookmark('3', frozen_frame=False)
             self.play(Write(texts['imagine-2']))
         
             # Animate the rain drops.
-            self.wait_until_bookmark('4')
+            self.wait_until_bookmark('4', frozen_frame=False)
             n = 3
             for i in range(n):
                 objs['rain-left'].save_state()
@@ -970,7 +970,7 @@ class DemoForICAB(PausableScene, CustomVoiceoverScene):
         # No communication.
         with self.voiceover(text="But in certain environment conditions, <bookmark mark='1'/> such as a mountain between the drones") as tracker:
             self.play(Write(texts['nocom-0']))
-            self.wait_until_bookmark('1')
+            self.wait_until_bookmark('1', frozen_frame=False)
             self.play(FadeIn(objs['obstacle']))
             
         with self.voiceover(text="This sharing of local information is not possible") as tracker:
@@ -1265,7 +1265,7 @@ class DemoForICAB(PausableScene, CustomVoiceoverScene):
             self.play(ReplacementTransform(objs['text-exp-0'], objs['text-exp-1'])) # This is a grid.
             self.play(FadeIn(objs['grid-big-center'])) # Show big grid in center.
             for i, m in enumerate(objs['grid-big-legend']): # Show the legend elements.
-                self.wait_until_bookmark(str(i+1))
+                self.wait_until_bookmark(str(i+1), frozen_frame=False)
                 self.play(FadeIn(m))
         
         with self.voiceover(text="The drone can move through the maze by taking actions left, right, and forward.", wait_kwargs=dict(frozen_frame=False)) as tracker:
@@ -1606,9 +1606,13 @@ class DemoForICAB(PausableScene, CustomVoiceoverScene):
         objs['text-exp-11'] = Text("We ran several similar experiments", font_size=32).move_to(gap_center).shift(UP*2)
         objs['text-exp-12'] = Text("to demonstrate the effectiveness of eQMARL", font_size=32).next_to(objs['text-exp-11'], DOWN)
         objs['text-exp-13'] = Text("These are our results...", font_size=32).next_to(objs['text-exp-12'], DOWN*2)
-        self.play(Write(objs['text-exp-11']))
-        self.play(Write(objs['text-exp-12']))
-        self.play(Write(objs['text-exp-13']))
+        with self.voiceover(text="We ran several similar experiments <bookmark mark='1'/> to demonstrate the effectiveness of our proposed approach. <bookmark mark='2'/> The following details our results.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+            self.play(Write(objs['text-exp-11']))
+            self.wait_until_bookmark('1', frozen_frame=False)
+            self.play(Write(objs['text-exp-12']))
+            self.wait_until_bookmark('2', frozen_frame=False)
+            self.play(Write(objs['text-exp-13']))
+
         self.small_pause(frozen_frame=False)
         self.play(
             ReplacementTransform(Group(objs['text-exp-11'], objs['text-exp-12'], objs['text-exp-13']), group_graphs['ax']),
@@ -1616,19 +1620,24 @@ class DemoForICAB(PausableScene, CustomVoiceoverScene):
         )
 
         objs['text-exp-14'] = Text("These are our baselines", font_size=32).next_to(group_graphs['legend-box'], UP)
-        self.play(Write(objs['text-exp-14']))
-        self.play(Write(group_graphs['legend-box']))
-        self.play(
-            Write(group_graphs['legend']['fctde']),
-            Write(group_graphs['legend']['qfctde']),
-            # Write(group_graphs['legend']['sctde']),
-        )
+        with self.voiceover(text="These are our baseline models for comparison.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+            self.play(Write(objs['text-exp-14']))
+            self.play(Write(group_graphs['legend-box']))
+            self.play(
+                Write(group_graphs['legend']['fctde']),
+                Write(group_graphs['legend']['qfctde']),
+                # Write(group_graphs['legend']['sctde']),
+            )
+        
         self.small_pause(frozen_frame=False)
+        
+        
         objs['text-exp-15'] = Text("and this is eQMARL", font_size=32).next_to(group_graphs['legend-box'], UP)
-        self.play(
-            ReplacementTransform(objs['text-exp-14'], objs['text-exp-15']),
-            Write(group_graphs['legend']['eqmarl-psi+']),
-        )
+        with self.voiceover(text="And this is our proposed approach.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+            self.play(
+                ReplacementTransform(objs['text-exp-14'], objs['text-exp-15']),
+                Write(group_graphs['legend']['eqmarl-psi+']),
+            )
         self.small_pause(frozen_frame=False)
         self.play(FadeOut(objs['text-exp-15']))
         
@@ -1649,7 +1658,8 @@ class DemoForICAB(PausableScene, CustomVoiceoverScene):
         ).next_to(pointer, UP, buff=0.1)
         
         objs['text-exp-16'] = Text("After 3,000 unique maze configurations...", font_size=32).next_to(group_graphs['legend-box'], UP)
-        self.play(Write(objs['text-exp-16']))
+        with self.voiceover(text="After three-thousand unique maze configurations.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+            self.play(Write(objs['text-exp-16']))
         
         # Add the pointer and label.
         self.play(FadeIn(pointer), FadeIn(label))
@@ -1676,17 +1686,21 @@ class DemoForICAB(PausableScene, CustomVoiceoverScene):
         self.play(FadeOut(pointer), FadeOut(label))
         
         # Emphasize score.
-        objs['text-exp-17'] = MarkupText("The agents learn to achieve a <b>higher score</b>", font_size=32).next_to(group_graphs['legend-box'], UP)
-        self.play(ReplacementTransform(objs['text-exp-16'], objs['text-exp-17']))
-        self.play(group_graphs['series'][series_kwargs['key']]['mean'].animate.set_stroke(8), rate_func=there_and_back, run_time=0.5)
-        self.play(group_graphs['series'][series_kwargs['key']]['mean'].animate.set_stroke(8), rate_func=there_and_back, run_time=0.5)
+        objs['text-exp-17'] = MarkupText("The drones learn to achieve a <b>higher score</b>", font_size=32).next_to(group_graphs['legend-box'], UP)
+        with self.voiceover(text="The drones learn to achieve a higher score.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+            self.play(ReplacementTransform(objs['text-exp-16'], objs['text-exp-17']))
+            for _ in range(2): # Repeat.
+                self.play(group_graphs['series'][series_kwargs['key']]['mean'].animate.set_stroke(8), rate_func=there_and_back, run_time=0.5)
+
         self.medium_pause(frozen_frame=False)
         
         # Emphasize std.
         objs['text-exp-18'] = MarkupText("with <b>lower standard deviation</b> than baselines", font_size=32).next_to(group_graphs['legend-box'], UP)
-        self.play(ReplacementTransform(objs['text-exp-17'], objs['text-exp-18']))
-        for series_kwargs in series:
-            self.play(FadeIn(group_graphs['series'][series_kwargs['key']]['std']), run_time=1)
+        with self.voiceover(text="With significantly lower standard deviation than the baselines.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+            self.play(ReplacementTransform(objs['text-exp-17'], objs['text-exp-18']))
+            for series_kwargs in series:
+                self.play(FadeIn(group_graphs['series'][series_kwargs['key']]['std']), run_time=1)
+
         self.medium_pause(frozen_frame=False)
         
         # Fade out everything except watermarks.
