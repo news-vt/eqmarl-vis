@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from enum import IntEnum
 import itertools
 import glob
@@ -7,11 +8,11 @@ import random
 import pandas as pd
 from pathlib import Path
 import tempfile
-from typing import Any, Callable, Iterable
+from typing import Any, Callable, Generator, Iterable, Optional
 
 from manim import *
 from manim.typing import *
-from manim_voiceover import VoiceoverScene
+from manim_voiceover import VoiceoverScene, VoiceoverTracker
 from manim_voiceover.services.gtts import GTTSService
 from manim_voiceover.services.coqui import CoquiService
 import segno
@@ -546,9 +547,58 @@ class PausableScene(Scene):
     def long_pause(self, duration=5, **kwargs):
         self.wait(duration, **kwargs)
 
-from TTS.api import TTS
+class CustomVoiceoverScene(VoiceoverScene):
+    def safe_wait(self, duration: float, **kwargs) -> None:
+        """Waits for a given duration. If the duration is less than one frame, it waits for one frame.
 
-class DemoForICAB(PausableScene, VoiceoverScene):
+        Args:
+            duration (float): The duration to wait for in seconds.
+        """
+        if duration > 1 / config["frame_rate"]:
+            self.wait(duration, **kwargs)
+    
+    def wait_until_bookmark(self, mark: str, **kwargs) -> None:
+        """Waits until a bookmark is reached.
+
+        Args:
+            mark (str): The `mark` attribute of the bookmark to wait for.
+        """
+        self.safe_wait(self.current_tracker.time_until_bookmark(mark), **kwargs)
+    
+    def wait_for_voiceover(self, **kwargs) -> None:
+        """Waits for the voiceover to finish."""
+        if not hasattr(self, "current_tracker"):
+            return
+        if self.current_tracker is None:
+            return
+
+        self.safe_wait(self.current_tracker.get_remaining_duration(), **kwargs)
+    
+    @contextmanager
+    def voiceover(
+        self, text: Optional[str] = None, ssml: Optional[str] = None, wait_kwargs = {}, **kwargs
+    ) -> Generator[VoiceoverTracker, None, None]:
+        """The main function to be used for adding voiceover to a scene.
+
+        Args:
+            text (str, optional): The text to be spoken. Defaults to None.
+            ssml (str, optional): The SSML to be spoken. Defaults to None.
+
+        Yields:
+            Generator[VoiceoverTracker, None, None]: The voiceover tracker object.
+        """
+        if text is None and ssml is None:
+            raise ValueError("Please specify either a voiceover text or SSML string.")
+
+        try:
+            if text is not None:
+                yield self.add_voiceover_text(text, **kwargs)
+            elif ssml is not None:
+                yield self.add_voiceover_ssml(ssml, **kwargs)
+        finally:
+            self.wait_for_voiceover(**wait_kwargs)
+
+class DemoForICAB(PausableScene, CustomVoiceoverScene):
     def construct(self):
         # Configure AI text-to-speech service.
         # See Manim Voiceover quickstart for details: https://voiceover.manim.community/en/latest/quickstart.html
@@ -582,13 +632,14 @@ class DemoForICAB(PausableScene, VoiceoverScene):
         # Sections can be tested individually, to do this set `skip_animations=True` to turn off all other sections not used (note that the section will still be generated, allowing objects to move to their final position for use with future sections in the pipeline).
         sections: list[tuple[Callable, dict]] = [
             (self.section_title, dict(name="Title", skip_animations=False)), # First.
-            # (self.section_scenario, dict(name="Scenario", skip_animations=False)),
-            # (self.section_experiment, dict(name="Experiment", skip_animations=False)),
+            (self.section_scenario, dict(name="Scenario", skip_animations=False)),
+            (self.section_experiment, dict(name="Experiment", skip_animations=False)),
             # (self.section_summary, dict(name="Summary", skip_animations=False)),
             # (self.section_outro, dict(name="Outro", skip_animations=False)), # Last.
         ]
         for method, section_kwargs in sections:
             self.next_section(**section_kwargs)
+            print(f"{self.renderer._original_skipping_status=}")
             method()
         
         self.wait(1)
@@ -660,7 +711,7 @@ class DemoForICAB(PausableScene, VoiceoverScene):
         ) as tracker:
             self.play(Write(self.attribution_text_full))
         
-        self.medium_pause(frozen_frame=False)
+        self.small_pause(frozen_frame=False)
         
         self.play(FadeOut(eqmarl_full), FadeOut(self.subtitle_text), eqmarl_acronym.animate.scale(0.5).to_edge(UL), ReplacementTransform(self.attribution_text_full, self.attribution_text))
 
@@ -868,59 +919,72 @@ class DemoForICAB(PausableScene, VoiceoverScene):
         
         
         # Imagine.
-        self.play(Write(texts['imagine-0']))
-        self.play(FadeIn(objs['env-left']), FadeIn(objs['env-right']))
-        # self.play(ReplacementTransform(texts['imagine-0'], texts['imagine-1']))
-        self.play(Write(texts['imagine-1']))
-        self.play(FadeIn(objs['drone-left']), FadeIn(objs['drone-right']))
-        # self.play(FadeOut(texts['imagine-1']))
-        self.play(Write(texts['imagine-2']))
-        
-        # Animate the rain drops.
-        n = 3
-        for i in range(n):
-            objs['rain-left'].save_state()
-            objs['rain-right'].save_state()
-            self.play(
-                objs['rain-left'].animate.move_to(objs['env-left'].get_center()).set_opacity(0),
-                objs['rain-right'].animate.move_to(objs['env-right'].get_center()).set_opacity(0),
-            )
-            if i < n-1: # Do not restore last iteraiton.
-                objs['rain-left'].restore()
-                objs['rain-right'].restore()
+        with self.voiceover(
+            text="""Imagine a scenario with two isolated <bookmark mark='1'/> wildfire environments,
+            and <bookmark mark='2'/> two AI-powered drones <bookmark mark='3'/> tasked with <bookmark mark='4'/> extinguishing the fires in each environment.
+            """
+        ) as tracker:
+            self.play(Write(texts['imagine-0']), run_time=tracker.time_until_bookmark('1', limit=1))
+            self.play(FadeIn(objs['env-left']), FadeIn(objs['env-right']), run_time=tracker.time_until_bookmark('2', limit=1))
+            self.wait_until_bookmark('2')
+            # self.play(Write(texts['imagine-1']))
+            self.play(Write(texts['imagine-1']), FadeIn(objs['drone-left']), FadeIn(objs['drone-right']), run_time=tracker.time_until_bookmark('3', limit=1))
             
-        self.small_pause(frozen_frame=False)
-        # self.medium_pause(frozen_frame=False)
-        # self.play(ReplacementTransform(texts['imagine-1'], texts['imagine-2']))
-        # self.play(FadeOut(texts['imagine-2']))
-        self.play(*[FadeOut(o) for k,o in texts.items() if 'imagine' in k])
+            self.wait_until_bookmark('3')
+            self.play(Write(texts['imagine-2']))
+        
+            # Animate the rain drops.
+            self.wait_until_bookmark('4')
+            n = 3
+            for i in range(n):
+                objs['rain-left'].save_state()
+                objs['rain-right'].save_state()
+                self.play(
+                    objs['rain-left'].animate.move_to(objs['env-left'].get_center()).set_opacity(0),
+                    objs['rain-right'].animate.move_to(objs['env-right'].get_center()).set_opacity(0),
+                )
+                if i < n-1: # Do not restore last iteraiton.
+                    objs['rain-left'].restore()
+                    objs['rain-right'].restore()
+                
+            self.small_pause(frozen_frame=False)
+            self.play(*[FadeOut(o) for k,o in texts.items() if 'imagine' in k])
         
         # Ideal.
-        self.play(Write(texts['ideal-0']))
-        self.play(
-            Write(arrows['env-left-up']),
-            Write(arrows['env-left-down']),
-            Write(arrows['env-right-up']),
-            Write(arrows['env-right-down']),
-        )
-        self.play(Write(texts['ideal-1']), Write(arrows['ideal-com-lr']))
-        self.play(FadeIn(texts['ideal-2']), Write(arrows['ideal-com-rl']))
-        self.medium_pause(frozen_frame=False)
+        with self.voiceover(text="In an ideal scenario") as tracker:
+            self.play(
+                Write(texts['ideal-0']),
+                Write(arrows['env-left-up']),
+                Write(arrows['env-left-down']),
+                Write(arrows['env-right-up']),
+                Write(arrows['env-right-down']),
+            )
+        with self.voiceover(text="the drones can learn the task more efficiently") as tracker:
+            self.play(Write(texts['ideal-1']), Write(arrows['ideal-com-lr']))
+        with self.voiceover(text="by cooperatively sharing their unique local experiences.") as tracker:
+            self.play(FadeIn(texts['ideal-2']), Write(arrows['ideal-com-rl']))
+
+        self.small_pause(frozen_frame=False)
         self.play(FadeOut(texts['ideal-0']), FadeOut(texts['ideal-1']), FadeOut(arrows['ideal-com-lr']), FadeOut(texts['ideal-2']), FadeOut(arrows['ideal-com-rl']))
         
         # No communication.
-        self.play(Write(texts['nocom-0']))
-        self.play(FadeIn(objs['obstacle']))
-        self.play(
-            Write(texts['nocom-1']),
-        )
-        self.play(
-            FadeIn(objs['nocom-left']),
-            FadeIn(objs['nocom-right']),
-            Write(arrows['no-com-lr']),
-            Write(arrows['no-com-rl']),
-        )
-        self.medium_pause(frozen_frame=False)
+        with self.voiceover(text="But in certain environment conditions, <bookmark mark='1'/> such as a mountain between the drones") as tracker:
+            self.play(Write(texts['nocom-0']))
+            self.wait_until_bookmark('1')
+            self.play(FadeIn(objs['obstacle']))
+            
+        with self.voiceover(text="This sharing of local information is not possible") as tracker:
+            self.play(
+                Write(texts['nocom-1']),
+            )
+            self.play(
+                FadeIn(objs['nocom-left']),
+                FadeIn(objs['nocom-right']),
+                Write(arrows['no-com-lr']),
+                Write(arrows['no-com-rl']),
+            )
+        # self.medium_pause(frozen_frame=False)
+        self.small_pause(frozen_frame=False)
         self.play(
             FadeOut(texts['nocom-0']),
             FadeOut(texts['nocom-1']),
@@ -938,44 +1002,58 @@ class DemoForICAB(PausableScene, VoiceoverScene):
         self.small_pause(frozen_frame=False)
         
         # Quantum.
-        self.play(Write(texts['quantum-0']))
-        self.wait(1)
-        self.play(ReplacementTransform(texts['quantum-0'], texts['quantum-1']))
-        self.play(FadeIn(objs['qubit-left']), FadeIn(objs['qubit-right']))
-        self.play(Write(waves['ent-0']))
-        objs['obstacle'].set_z_index(1) # On top.
+        with self.voiceover(text="However") as tracker:
+            self.play(Write(texts['quantum-0']))
+        # self.wait(1)
+        with self.voiceover(text="By exploiting the nature of quantum entanglment distributed between the drones, the drones are able to implicitly collaborate regardless of any obstacles.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+            self.play(ReplacementTransform(texts['quantum-0'], texts['quantum-1']))
+            self.play(FadeIn(objs['qubit-left']), FadeIn(objs['qubit-right']), Write(waves['ent-0']))
+            # self.play(Write(waves['ent-0']))
+            objs['obstacle'].set_z_index(1) # On top.
+            # self.small_pause(frozen_frame=False)
+            # self.safe_wait(1)
+            self.play(
+                Write(texts['quantum-2']),
+                trackers['amp-0'].animate.set_value(.2),
+                trackers['freq-0'].animate.set_value(4*PI),
+                objs['qubit-left'].animate.next_to(objs['drone-left'], RIGHT),
+                objs['qubit-right'].animate.next_to(objs['drone-right'], LEFT),
+                # run_time=tracker.get_remaining_duration(),
+            )
+
+        with self.voiceover(text="This means that, using quantum entanglement, <bookmark mark='1'/> the drones can use their unique local experiences <bookmark mark='2'/> to influence the actions of others <bookmark mark='3'/> without the need for direct communication.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+            self.wait_until_bookmark('1', frozen_frame=False)
+            self.play(FadeOut(texts['quantum-2']), ReplacementTransform(texts['quantum-1'], texts['quantum-3']))
+            arrows['env-left-up'].shift(LEFT*.2) # Move to center.
+            arrows['env-right-down'].shift(LEFT*.2) # Move to center.
+            self.play(
+                Write(arrows['env-left-up']),
+            )
+            self.wait_until_bookmark('2', frozen_frame=False)
+            self.play(Write(texts['quantum-4']))
+            self.play(
+                Write(arrows['env-right-down']),
+            )
+            self.wait_until_bookmark('3', frozen_frame=False)
+            self.play(Write(texts['quantum-5']))
+        # self.medium_pause(frozen_frame=False)
         self.small_pause(frozen_frame=False)
-        self.play(
-            Write(texts['quantum-2']),
-            trackers['amp-0'].animate.set_value(.2),
-            trackers['freq-0'].animate.set_value(4*PI),
-            objs['qubit-left'].animate.next_to(objs['drone-left'], RIGHT),
-            objs['qubit-right'].animate.next_to(objs['drone-right'], LEFT),
-        )
-        self.play(FadeOut(texts['quantum-2']), ReplacementTransform(texts['quantum-1'], texts['quantum-3']))
-        arrows['env-left-up'].shift(LEFT*.2) # Move to center.
-        arrows['env-right-down'].shift(LEFT*.2) # Move to center.
-        self.play(
-            Write(arrows['env-left-up']),
-        )
-        self.play(Write(texts['quantum-4']))
-        self.play(
-            Write(arrows['env-right-down']),
-        )
-        self.play(Write(texts['quantum-5']))
-        self.medium_pause(frozen_frame=False)
+        
         
         # Lasting point before section change.
-        self.play(ReplacementTransform(VGroup(texts['quantum-3'], texts['quantum-4'], texts['quantum-5']), texts['quantum-6']))
-        self.play(Write(texts['quantum-7']))
-        self.play(arrows['env-left-up'].obj.animate.set_color(YELLOW).set_stroke(width=12, opacity=0.5), rate_func=there_and_back)
-        self.play(
-            Wiggle(objs['qubit-left']),
-            Wiggle(objs['qubit-right']),
-            rate_func=linear,
-        )
-        self.play(arrows['env-right-down'].obj.animate.set_color(YELLOW).set_stroke(width=12, opacity=0.5), rate_func=there_and_back)
-        self.medium_pause(frozen_frame=False)
+        with self.voiceover(text="This is the essence of our work. Using quantum entanglement to facilitate multi-agent learning via <bookmark mark='1'/> implicit coordination without direct communication.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+            self.play(ReplacementTransform(VGroup(texts['quantum-3'], texts['quantum-4'], texts['quantum-5']), texts['quantum-6']))
+            self.wait_until_bookmark('1', frozen_frame=False)
+            self.play(Write(texts['quantum-7']))
+            self.play(arrows['env-left-up'].obj.animate.set_color(YELLOW).set_stroke(width=12, opacity=0.5), rate_func=there_and_back)
+            self.play(
+                Wiggle(objs['qubit-left']),
+                Wiggle(objs['qubit-right']),
+                rate_func=linear,
+            )
+            self.play(arrows['env-right-down'].obj.animate.set_color(YELLOW).set_stroke(width=12, opacity=0.5), rate_func=there_and_back)
+        # self.medium_pause(frozen_frame=False)
+        self.small_pause(frozen_frame=False)
 
         # Clear the screen of all objects created in this section.
         mobjects_in_scene = list(set(self.mobjects) - set([self.eqmarl_acronym, self.attribution_text]))
@@ -1176,9 +1254,12 @@ class DemoForICAB(PausableScene, VoiceoverScene):
         ###
         # Animations.
         ###
-        self.play(Write(objs['text-exp-0'])) # Let's see example.
+        with self.voiceover(text="With this in mind, let's dive deeper through an illustrative example.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+            self.play(Write(objs['text-exp-0'])) # Let's see example.
         
         self.small_pause(frozen_frame=False)
+        
+        # return
         
         self.play(ReplacementTransform(objs['text-exp-0'], objs['text-exp-1'])) # This is a grid.
         self.play(FadeIn(objs['grid-big-center'])) # Show big grid in center.
