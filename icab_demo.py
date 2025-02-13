@@ -565,11 +565,11 @@ class DemoForICAB(PausableScene):
         # Each section should cleanup any objects after itself if they are not to be used again.
         # Sections can be tested individually, to do this set `skip_animations=True` to turn off all other sections not used (note that the section will still be generated, allowing objects to move to their final position for use with future sections in the pipeline).
         sections: list[tuple[Callable, dict]] = [
-            (self.section_title, dict(name="Title", skip_animations=True)), # First.
+            (self.section_title, dict(name="Title", skip_animations=False)), # First.
             (self.section_scenario, dict(name="Scenario", skip_animations=False)),
-            # (self.section_experiment, dict(name="Experiment", skip_animations=False)),
-            # (self.section_summary, dict(name="Summary", skip_animations=False)),
-            # (self.section_outro, dict(name="Outro", skip_animations=False)), # Last.
+            (self.section_experiment, dict(name="Experiment", skip_animations=False)),
+            (self.section_summary, dict(name="Summary", skip_animations=False)),
+            (self.section_outro, dict(name="Outro", skip_animations=False)), # Last.
         ]
         for method, section_kwargs in sections:
             self.next_section(**section_kwargs)
@@ -960,14 +960,15 @@ class DemoForICAB(PausableScene):
         
         # Text objects.
         objs['text-exp-0'] = Text("Let's see an illustrative example", font_size=32)
-        objs['text-exp-1'] = Tex(r"This is an $5\times5$ grid environment for 1 player", font_size=32).to_edge(UP, buff=1.5)
-        objs['text-exp-2'] = Tex(r"The player can take actions $a \in \{\textrm{left}, \textrm{right}, \textrm{forward}\}$ to move in the grid", font_size=32).to_edge(UP, buff=1.5)
-        objs['text-exp-3'] = Text("As the player moves it gathers experiences", font_size=32).to_edge(UP, buff=1.5)
-        objs['text-exp-4'] = Text("The player learns from experiences to find the goal", font_size=32).to_edge(UP, buff=1.5)
-        objs['text-exp-5'] = Text("Now consider 2 parallel environments with different agents", font_size=32).to_edge(UP, buff=1.5)
-        objs['text-exp-6'] = Text("The agents cannot directly communicate with each other", font_size=32).to_edge(UP, buff=1.5)
+        objs['text-exp-1'] = Tex(r"This is an $5\times5$ maze grid environment for 1 drone", font_size=32).to_edge(UP, buff=1.5)
+        objs['text-exp-2'] = Tex(r"The drone can take actions $a \in \{\textrm{left}, \textrm{right}, \textrm{forward}\}$ to move in the grid", font_size=32).to_edge(UP, buff=1.5)
+        objs['text-exp-3'] = Text("As the drone moves it gathers experiences", font_size=32).to_edge(UP, buff=1.5)
+        objs['text-exp-4'] = Text("The drone learns from experiences to find the goal", font_size=32).to_edge(UP, buff=1.5)
+        objs['text-exp-5'] = Text("Now consider 2 parallel environments with different drones", font_size=32).to_edge(UP, buff=1.5)
+        objs['text-exp-6'] = Text("The drones cannot directly communicate with each other", font_size=32).to_edge(UP, buff=1.5)
         objs['text-exp-7'] = Text("Which means they cannot coordinate using shared experiences", font_size=32).to_edge(UP, buff=1.5)
-        objs['text-exp-8'] = MarkupText(f"<span fgcolor=\"{self.colors['quantum'].to_hex()}\">Quantum entanglement</span> between the agents", font_size=32).to_edge(UP, buff=1.2)
+        # objs['text-exp-7-1'] = Text("Which means they cannot coordinate using shared experiences", font_size=32).to_edge(UP, buff=1.5)
+        objs['text-exp-8'] = MarkupText(f"<span fgcolor=\"{self.colors['quantum'].to_hex()}\">Quantum entanglement</span> between the drones", font_size=32).to_edge(UP, buff=1.2)
         objs['text-exp-9'] = MarkupText(f"couples their <span fgcolor=\"{self.colors['observation']}\">unique local experiences</span>", font_size=32).next_to(objs['text-exp-8'], DOWN)
         objs['text-exp-10'] = MarkupText(f"allowing them to learn optimal <span fgcolor=\"{self.colors['action']}\">actions</span> <u>without</u> <span fgcolor=\"{self.colors['no']}\">direct communication</span>", font_size=32).next_to(objs['text-exp-9'], DOWN)
         
@@ -1148,6 +1149,9 @@ class DemoForICAB(PausableScene):
         # Animations.
         ###
         self.play(Write(objs['text-exp-0'])) # Let's see example.
+        
+        self.small_pause(frozen_frame=False)
+        
         self.play(ReplacementTransform(objs['text-exp-0'], objs['text-exp-1'])) # This is a grid.
         self.play(FadeIn(objs['grid-big-center'])) # Show big grid in center.
         for m in objs['grid-big-legend']: # Show the legend elements.
@@ -1183,18 +1187,15 @@ class DemoForICAB(PausableScene):
         self.play(ReplacementTransform(objs['text-exp-5'], objs['text-exp-6'])) # Cannot communicate.
         self.play(
             objs['grid-big-left'].obj.animate_actions(*minigrid_path_str_to_list('fff')),
-            objs['grid-big-right'].obj.animate_actions(*minigrid_path_str_to_list('rfff')),
+            objs['grid-big-right'].obj.animate_actions(*minigrid_path_str_to_list('rff')),
             run_time=2,
         )
         self.play(ReplacementTransform(objs['text-exp-6'], objs['text-exp-7'])) # Cannot coordinate.
         self.play(
-            objs['grid-big-left'].obj.animate_actions(*minigrid_path_str_to_list('rfff')),
-            objs['grid-big-right'].obj.animate_actions(*minigrid_path_str_to_list('flfff')),
+            objs['grid-big-left'].obj.animate_actions(*minigrid_path_str_to_list('rf')),
+            objs['grid-big-right'].obj.animate_actions(*minigrid_path_str_to_list('fl')),
             run_time=2,
         )
-        
-        
-        
         
         
         self.play(
