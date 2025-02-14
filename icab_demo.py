@@ -1723,12 +1723,39 @@ class DemoForICAB(PausableScene, CustomVoiceoverScene):
             buff=(.2, .5),
             col_alignments='rl',
         ).next_to(self.summary_header, DOWN, buff=0.5)
-        self.play(Write(self.summary_header))
-        for icon, text in self.summary_list.enumerate_rows():
-            self.play(Write(icon), Write(text))
-            self.wait(1)
         
-        self.medium_pause(frozen_frame=False)
+        with self.voiceover(text="The key takeaways are as follows.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+            self.play(Write(self.summary_header))
+        
+        self.small_pause(frozen_frame=False)
+        
+        # Get list of summary icons and text objects.
+        icons, texts = tuple(zip(*list(self.summary_list.enumerate_rows())))
+        
+        with self.voiceover(text="Quantum entangled learning can improve performance and couple agent behavior.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+            self.play(Write(icons[0]), Write(texts[0]))
+        
+        self.small_pause(frozen_frame=False)
+
+        with self.voiceover(text="eQMARL enhances privacy by eliminating experience sharing.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+            self.play(Write(icons[1]), Write(texts[1]))
+        
+        self.small_pause(frozen_frame=False)
+
+        with self.voiceover(text="eQMARL dramatically reduces communication overhead.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+            self.play(Write(icons[2]), Write(texts[2]))
+        
+        self.small_pause(frozen_frame=False)
+        
+        with self.voiceover(text="eQMARL can be deployed to learn diverse environments.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+            self.play(Write(icons[3]), Write(texts[3]))
+
+        # for icon, text in self.summary_list.enumerate_rows():
+        #     self.play(Write(icon), Write(text))
+        #     self.wait(1)
+        
+        # self.medium_pause(frozen_frame=False)
+        self.small_pause(frozen_frame=False)
 
     def section_outro(self):
         """Outro section.
