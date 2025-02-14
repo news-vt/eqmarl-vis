@@ -14,7 +14,8 @@ from manim import *
 from manim.typing import *
 from manim_voiceover import VoiceoverScene, VoiceoverTracker
 from manim_voiceover.services.gtts import GTTSService
-from manim_voiceover.services.coqui import CoquiService
+from manim_voiceover.services.openai import OpenAIService
+# from manim_voiceover.services.coqui import CoquiService
 import segno
 
 # config.disable_caching = True
@@ -602,16 +603,22 @@ class DemoForICAB(PausableScene, CustomVoiceoverScene):
     def construct(self):
         # Configure AI text-to-speech service.
         # See Manim Voiceover quickstart for details: https://voiceover.manim.community/en/latest/quickstart.html
-        self.set_speech_service(GTTSService(
-            lang="en",
-            tld="com",
-            global_speed=1.15,
-            transcription_model='base',
-        ))
-        # self.set_speech_service(CoquiService(
+        # self.set_speech_service(GTTSService(
+        #     lang="en",
+        #     tld="com",
         #     global_speed=1.15,
         #     transcription_model='base',
         # ))
+        self.set_speech_service(
+            OpenAIService(
+                voice="sage",
+                model="tts-1", # Best audio and pronunciation.
+                # model="tts-1-hd",
+                # global_speed=1.15,
+                global_speed=1.1,
+                transcription_model='base',
+            )
+        )
         
         # Colorway.
         self.colors = {
@@ -690,7 +697,7 @@ class DemoForICAB(PausableScene, CustomVoiceoverScene):
         
         # Animate the title.
         with self.voiceover(
-            text="""Welcome to our short video presentation for our <bookmark mark='1'/>recently published work titled eQMARL, which stands for <bookmark mark='2'/>Entangled Quantum Multi-Agent Reinforcement Learning.
+            text="""Welcome to our video presentation for our <bookmark mark='1'/>recently published work titled eQMARL, which stands for <bookmark mark='2'/>Entangled Quantum Multi-Agent Reinforcement Learning.
             """
         ) as tracker:
             self.wait_until_bookmark('1', frozen_frame=False)
@@ -698,12 +705,16 @@ class DemoForICAB(PausableScene, CustomVoiceoverScene):
             # self.wait_until_bookmark('2')
             self.play(Write(eqmarl_full))
         
+        self.small_pause(frozen_frame=False)
+        
         with self.voiceover(
             text="""The key point of our work is that through quantum entanglement eQMARL enables swarms of AI agents to <bookmark mark='1'/>coordinate without direct communication.
             """
         ) as tracker:
             self.wait_until_bookmark('1', frozen_frame=False)
             self.play(Write(self.subtitle_text))
+        
+        self.small_pause(frozen_frame=False)
 
         with self.voiceover(
             text="""Our work has been published in The Thirteenth International Conference on Learning Representations.
@@ -968,7 +979,7 @@ class DemoForICAB(PausableScene, CustomVoiceoverScene):
         self.play(FadeOut(texts['ideal-0']), FadeOut(texts['ideal-1']), FadeOut(arrows['ideal-com-lr']), FadeOut(texts['ideal-2']), FadeOut(arrows['ideal-com-rl']))
         
         # No communication.
-        with self.voiceover(text="But in certain environment conditions, <bookmark mark='1'/> such as a mountain between the drones") as tracker:
+        with self.voiceover(text="But in certain environment conditions, <bookmark mark='1'/> such as an obstacle preventing communication between the drones") as tracker:
             self.play(Write(texts['nocom-0']))
             self.wait_until_bookmark('1', frozen_frame=False)
             self.play(FadeIn(objs['obstacle']))
@@ -1070,7 +1081,7 @@ class DemoForICAB(PausableScene, CustomVoiceoverScene):
         objs['text-exp-2'] = Tex(r"The drone can take actions $a \in \{\textrm{left}, \textrm{right}, \textrm{forward}\}$ to move in the maze", font_size=32).to_edge(UP, buff=1.5)
         objs['text-exp-3'] = Text("As the drone moves it gathers experiences", font_size=32).to_edge(UP, buff=1.5)
         objs['text-exp-4'] = Text("The drone learns from experiences to find the goal", font_size=32).to_edge(UP, buff=1.5)
-        objs['text-exp-5'] = Text("Now consider 2 parallel environments with different drones", font_size=32).to_edge(UP, buff=1.5)
+        objs['text-exp-5'] = Text("Now consider two parallel environments with different drones", font_size=32).to_edge(UP, buff=1.5)
         objs['text-exp-6'] = Text("The drones cannot directly communicate with each other", font_size=32).to_edge(UP, buff=1.5)
         objs['text-exp-7'] = Text("Which means they cannot coordinate using shared experiences", font_size=32).to_edge(UP, buff=1.5)
         # objs['text-exp-7-1'] = Text("Which means they cannot coordinate using shared experiences", font_size=32).to_edge(UP, buff=1.5)
@@ -1302,19 +1313,68 @@ class DemoForICAB(PausableScene, CustomVoiceoverScene):
         with self.voiceover(text="The drones are not able to directly communicate with each other, due to the gap between them.", wait_kwargs=dict(frozen_frame=False)) as tracker:
             self.play(ReplacementTransform(objs['text-exp-5'], objs['text-exp-6'])) # Cannot communicate.
             self.play(
-                objs['grid-big-left'].obj.animate_actions(*minigrid_path_str_to_list('fff')),
+                objs['grid-big-left'].obj.animate_actions(*minigrid_path_str_to_list('ff')),
                 objs['grid-big-right'].obj.animate_actions(*minigrid_path_str_to_list('rff')),
                 run_time=2,
             )
-        with self.voiceover(text="From a learning perspective, this means that they are not able to coordinate using shared experiences. This is a problem because, we see that drone A fell into the lava, and the information it learned could be helpful for drone B to learn to avoid the hazard, but the lack of direct communication means that drone B will not know what happened and must experience the hazard itself.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+        with self.voiceover(text="From a learning perspective, this means that they are not able to coordinate using shared experiences.", wait_kwargs=dict(frozen_frame=False)) as tracker:
             self.play(ReplacementTransform(objs['text-exp-6'], objs['text-exp-7'])) # Cannot coordinate.
-            # self.play(
-            #     objs['grid-big-left'].obj.animate_actions(*minigrid_path_str_to_list('rf')),
-            #     objs['grid-big-right'].obj.animate_actions(*minigrid_path_str_to_list('fl')),
-            #     run_time=2,
-            # )
-            path_left = 'rf' # Short abbreviated path.
-            path_right = 'fl' # Short abbreviated path.
+            self.play(
+                    objs['grid-big-left'].obj.animate_actions(*minigrid_path_str_to_list('rf')),
+                    objs['grid-big-right'].obj.animate_actions(*minigrid_path_str_to_list('flf')),
+                    run_time=2,
+                )
+        # with self.voiceover(text="From a learning perspective, this means that they are not able to coordinate using shared experiences. This is a problem because, we see that drone A fell into the lava, and the information it learned could be helpful for drone B to learn to avoid the hazard, but the lack of direct communication means that drone B will not know what happened and must experience the hazard itself.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+        self.play(
+            ReplacementTransform(objs['grid-big-left'], orig_left),
+            ReplacementTransform(objs['grid-big-right'], orig_right),
+        )
+        objs['grid-big-left'] = orig_left
+        objs['grid-big-right'] = orig_right
+        orig_left = objs['grid-big-left'].copy()
+        orig_right = objs['grid-big-right'].copy()
+        with self.voiceover(text="This is a problem because, we see that drone A fell into the lava, <bookmark mark='1'/> and the information it learned could be helpful for drone B to avoid the hazard, <bookmark mark='2'/> but the lack of direct communication means that drone B must experience the hazard itself.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+            # path_left = 'fffrf' # Full path.
+            # path_right = 'rffflf' # Full path.
+            path_left = 'ffrf' # Full path.
+            path_right = 'rffflf' # Full path.
+            # objs['text-exp-7'] = Text("Which means they cannot coordinate using shared experiences", font_size=32).to_edge(UP, buff=1.5)
+            objs['text-exp-7-1'] = Text("This is a problem because drone A fell into the lava", font_size=32).to_edge(UP, buff=1.5)
+            self.play(ReplacementTransform(objs['text-exp-7'], objs['text-exp-7-1']))
+            self.play(
+                objs['grid-big-left'].obj.animate_actions(*minigrid_path_str_to_list(path_left)),
+                objs['grid-big-right'].obj.animate_actions(*minigrid_path_str_to_list(path_right)),
+                run_time=2,
+            )
+            self.play(
+                ReplacementTransform(objs['grid-big-left'], orig_left),
+                ReplacementTransform(objs['grid-big-right'], orig_right),
+            )
+            objs['grid-big-left'] = orig_left
+            objs['grid-big-right'] = orig_right
+            orig_left = objs['grid-big-left'].copy()
+            orig_right = objs['grid-big-right'].copy()
+            #
+            self.wait_until_bookmark('1', frozen_frame=False)
+            objs['text-exp-7-2'] = Text("drone A's experiences could help drone B avoid the hazard", font_size=32).to_edge(UP, buff=1.5)
+            self.play(ReplacementTransform(objs['text-exp-7-1'], objs['text-exp-7-2']))
+            self.play(
+                objs['grid-big-left'].obj.animate_actions(*minigrid_path_str_to_list(path_left)),
+                objs['grid-big-right'].obj.animate_actions(*minigrid_path_str_to_list(path_right)),
+                run_time=2,
+            )
+            self.play(
+                ReplacementTransform(objs['grid-big-left'], orig_left),
+                ReplacementTransform(objs['grid-big-right'], orig_right),
+            )
+            objs['grid-big-left'] = orig_left
+            objs['grid-big-right'] = orig_right
+            orig_left = objs['grid-big-left'].copy()
+            orig_right = objs['grid-big-right'].copy()
+            #
+            self.wait_until_bookmark('2', frozen_frame=False)
+            objs['text-exp-7-3'] = Text("but no communication means that drone B must experience the hazard for itself", font_size=32).to_edge(UP, buff=1.5)
+            self.play(ReplacementTransform(objs['text-exp-7-2'], objs['text-exp-7-3']))
             while tracker.get_remaining_duration() > 0:
                 self.play(
                     objs['grid-big-left'].obj.animate_actions(*minigrid_path_str_to_list(path_left)),
@@ -1330,15 +1390,50 @@ class DemoForICAB(PausableScene, CustomVoiceoverScene):
                     objs['grid-big-right'] = orig_right
                     orig_left = objs['grid-big-left'].copy()
                     orig_right = objs['grid-big-right'].copy()
-                    path_left = 'fffrf' # Full path.
-                    path_right = 'rfffl' # Full path.
+            # self.play(
+            #     ReplacementTransform(objs['grid-big-left'], orig_left),
+            #     ReplacementTransform(objs['grid-big-right'], orig_right),
+            # )
+            # objs['grid-big-left'] = orig_left
+            # objs['grid-big-right'] = orig_right
+            # orig_left = objs['grid-big-left'].copy()
+            # orig_right = objs['grid-big-right'].copy()
+            # #
+            
+            # # self.play(ReplacementTransform(objs['text-exp-6'], objs['text-exp-7'])) # Cannot coordinate.
+            # # self.play(
+            # #     objs['grid-big-left'].obj.animate_actions(*minigrid_path_str_to_list('rf')),
+            # #     objs['grid-big-right'].obj.animate_actions(*minigrid_path_str_to_list('fl')),
+            # #     run_time=2,
+            # # )
+            # # path_left = 'rf' # Short abbreviated path.
+            # # path_right = 'fl' # Short abbreviated path.
+            # path_left = 'fffrf' # Full path.
+            # path_right = 'rfffl' # Full path.
+            # while tracker.get_remaining_duration() > 0:
+            #     self.play(
+            #         objs['grid-big-left'].obj.animate_actions(*minigrid_path_str_to_list(path_left)),
+            #         objs['grid-big-right'].obj.animate_actions(*minigrid_path_str_to_list(path_right)),
+            #         run_time=2,
+            #     )
+            #     if tracker.get_remaining_duration() > 0:
+            #         self.play(
+            #             ReplacementTransform(objs['grid-big-left'], orig_left),
+            #             ReplacementTransform(objs['grid-big-right'], orig_right),
+            #         )
+            #         objs['grid-big-left'] = orig_left
+            #         objs['grid-big-right'] = orig_right
+            #         orig_left = objs['grid-big-left'].copy()
+            #         orig_right = objs['grid-big-right'].copy()
+            #         # path_left = 'fffrf' # Full path.
+            #         # path_right = 'rfffl' # Full path.
         
         with self.voiceover(text="On the other hand, quantum entanglement can bridge the gap between the drones.", wait_kwargs=dict(frozen_frame=False)) as tracker:
             self.play(
                 ReplacementTransform(objs['grid-big-left'], objs['grid-small-left']),
                 ReplacementTransform(objs['grid-big-right'], objs['grid-small-right']),
             )
-            self.play(ReplacementTransform(objs['text-exp-7'], objs['text-exp-8'])) # Using quantum.
+            self.play(ReplacementTransform(objs['text-exp-7-3'], objs['text-exp-8'])) # Using quantum.
             self.play(
                 FadeIn(objs['qubit-left']),
                 FadeIn(objs['qubit-right']),
@@ -1346,17 +1441,21 @@ class DemoForICAB(PausableScene, CustomVoiceoverScene):
             )
         orig_left = objs['grid-small-left'].copy()
         orig_right = objs['grid-small-right'].copy()
-        with self.voiceover(text="In effect, coupling their unique local experiences.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+        with self.voiceover(text="In effect, coupling their unique local experiences, and allowing them to learn optimal actions without the need for direct communication.", wait_kwargs=dict(frozen_frame=False)) as tracker:
             self.play(Write(objs['text-exp-9']))
             self.play(
-                objs['grid-small-left'].obj.animate_actions(*minigrid_path_str_to_list('rffl')),
-                objs['grid-small-right'].obj.animate_actions(*minigrid_path_str_to_list('ffr')),
+                # objs['grid-small-left'].obj.animate_actions(*minigrid_path_str_to_list('rffl')),
+                # objs['grid-small-right'].obj.animate_actions(*minigrid_path_str_to_list('ffr')),
+                objs['grid-small-left'].obj.animate_actions(*minigrid_path_str_to_list('frf')),
+                objs['grid-small-right'].obj.animate_actions(*minigrid_path_str_to_list('rff')),
                 run_time=2,
             )
-        with self.voiceover(text="Which allows them to learn optimal actions without the need for direct communication. As you can see from this example, the drones did not fall into the lava because their choice of actions was influenced by both their own local experiences and the implicit experience of the other drone via quantum entanglement.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+        with self.voiceover(text="As you can see from this example, drone B did not fall into the lava because their choice of actions was influenced by the quantum entangled experiences of drone A.", wait_kwargs=dict(frozen_frame=False)) as tracker:
             self.play(Write(objs['text-exp-10']))
-            path_left = 'ffffrff' # Short abbreviated path.
-            path_right = 'fffflff' # Short abbreviated path.
+            # path_left = 'ffffrff' # Short abbreviated path.
+            # path_right = 'fffflff' # Short abbreviated path.
+            path_left = 'ffflfff' # Short abbreviated path.
+            path_right = 'fflffff' # Short abbreviated path.
             while tracker.get_remaining_duration() > 0:
                 self.play(
                     objs['grid-small-left'].obj.animate_actions(*minigrid_path_str_to_list(path_left)),
@@ -1372,8 +1471,10 @@ class DemoForICAB(PausableScene, CustomVoiceoverScene):
                     objs['grid-small-right'] = orig_right
                     orig_left = objs['grid-small-left'].copy()
                     orig_right = objs['grid-small-right'].copy()
-                    path_left = 'rfflffffrff' # Full path.
-                    path_right = 'ffrfffflff' # Full path.
+                    # path_left = 'rfflffffrff' # Full path.
+                    # path_right = 'ffrfffflff' # Full path.
+                    path_left = 'frfffflfff' # Full path.
+                    path_right = 'rfffflffff' # Full path.
             # self.play(
             #     objs['grid-small-left'].obj.animate_actions(*minigrid_path_str_to_list('ffffrff')),
             #     objs['grid-small-right'].obj.animate_actions(*minigrid_path_str_to_list('fffflff')),
