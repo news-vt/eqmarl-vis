@@ -632,8 +632,8 @@ class DemoForICAB(PausableScene, CustomVoiceoverScene):
         # Sections can be tested individually, to do this set `skip_animations=True` to turn off all other sections not used (note that the section will still be generated, allowing objects to move to their final position for use with future sections in the pipeline).
         sections: list[tuple[Callable, dict]] = [
             (self.section_title, dict(name="Title", skip_animations=False)), # First.
-            # (self.section_scenario, dict(name="Scenario", skip_animations=False)),
-            # (self.section_experiment, dict(name="Experiment", skip_animations=False)),
+            (self.section_scenario, dict(name="Scenario", skip_animations=False)),
+            (self.section_experiment, dict(name="Experiment", skip_animations=False)),
             (self.section_summary, dict(name="Summary", skip_animations=False)),
             (self.section_outro, dict(name="Outro", skip_animations=False)), # Last.
         ]
@@ -1661,29 +1661,29 @@ class DemoForICAB(PausableScene, CustomVoiceoverScene):
         with self.voiceover(text="After three-thousand unique maze configurations.", wait_kwargs=dict(frozen_frame=False)) as tracker:
             self.play(Write(objs['text-exp-16']))
         
-        # Add the pointer and label.
-        self.play(FadeIn(pointer), FadeIn(label))
-        
-        # Animate the plots from left-to-right by setting the tracker value to the end value.
-        self.play(
-            tracker_x_value.animate.set_value(x_range[-1]),
-            Succession(
-                *[ApplyMethod(objs['grid-small-up'].obj.move_player, a) for a in [random.choice(list(MinigridAction)) for _ in range(x_range[-1])]],
-                *[
-                    ApplyMethod(objs['grid-small-up'].obj.get_player().move_to, objs['grid-small-up'].obj.get_goal().get_center()),
-                ],
-            ),
-            Succession(
-                *[ApplyMethod(objs['grid-small-down'].obj.move_player, a) for a in [random.choice(list(MinigridAction)) for _ in range(x_range[-1])]],
-                *[
-                    ApplyMethod(objs['grid-small-down'].obj.get_player().move_to, objs['grid-small-down'].obj.get_goal().get_center()),
-                ],
-            ),
-            run_time=5,
-        )
-        
-        # Remove the pointer and tracker label.
-        self.play(FadeOut(pointer), FadeOut(label))
+            # Add the pointer and label.
+            self.play(FadeIn(pointer), FadeIn(label))
+            
+            # Animate the plots from left-to-right by setting the tracker value to the end value.
+            self.play(
+                tracker_x_value.animate.set_value(x_range[-1]),
+                Succession(
+                    *[ApplyMethod(objs['grid-small-up'].obj.move_player, a) for a in [random.choice(list(MinigridAction)) for _ in range(x_range[-1])]],
+                    *[
+                        ApplyMethod(objs['grid-small-up'].obj.get_player().move_to, objs['grid-small-up'].obj.get_goal().get_center()),
+                    ],
+                ),
+                Succession(
+                    *[ApplyMethod(objs['grid-small-down'].obj.move_player, a) for a in [random.choice(list(MinigridAction)) for _ in range(x_range[-1])]],
+                    *[
+                        ApplyMethod(objs['grid-small-down'].obj.get_player().move_to, objs['grid-small-down'].obj.get_goal().get_center()),
+                    ],
+                ),
+                run_time=5,
+            )
+            
+            # Remove the pointer and tracker label.
+            self.play(FadeOut(pointer), FadeOut(label))
         
         # Emphasize score.
         objs['text-exp-17'] = MarkupText("The drones learn to achieve a <b>higher score</b>", font_size=32).next_to(group_graphs['legend-box'], UP)
@@ -1732,22 +1732,22 @@ class DemoForICAB(PausableScene, CustomVoiceoverScene):
         # Get list of summary icons and text objects.
         icons, texts = tuple(zip(*list(self.summary_list.enumerate_rows())))
         
-        with self.voiceover(text="Quantum entangled learning can improve performance and couple agent behavior.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+        with self.voiceover(text="Quantum entangled learning can improve performance through coupled agent behavior.", wait_kwargs=dict(frozen_frame=False)) as tracker:
             self.play(Write(icons[0]), Write(texts[0]))
         
         self.small_pause(frozen_frame=False)
 
-        with self.voiceover(text="eQMARL enhances privacy by eliminating experience sharing.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+        with self.voiceover(text="eQMARL enhances privacy by eliminating the sharing of local experiences through direct communication", wait_kwargs=dict(frozen_frame=False)) as tracker:
             self.play(Write(icons[1]), Write(texts[1]))
         
         self.small_pause(frozen_frame=False)
 
-        with self.voiceover(text="eQMARL dramatically reduces communication overhead.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+        with self.voiceover(text="it dramatically reduces communication overhead because experiences are never shared between agents", wait_kwargs=dict(frozen_frame=False)) as tracker:
             self.play(Write(icons[2]), Write(texts[2]))
         
         self.small_pause(frozen_frame=False)
         
-        with self.voiceover(text="eQMARL can be deployed to learn diverse environments.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+        with self.voiceover(text="and it can be deployed to learn a diverse set of environments, such as the wildfire and maze scenarios previously shown.", wait_kwargs=dict(frozen_frame=False)) as tracker:
             self.play(Write(icons[3]), Write(texts[3]))
 
         # for icon, text in self.summary_list.enumerate_rows():
@@ -1777,11 +1777,11 @@ class DemoForICAB(PausableScene, CustomVoiceoverScene):
         texts['arxiv'] = Text("Paper is available on arXiv", font_size=20)
 
 
-        with self.voiceover(text="Thank you for watching our presentation on <bookmark mark='1'/> eQMARL, a quantum entangled approach for multi-agent reinforcement learning that facilitates <bookmark mark='2'/> coordination without communication.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+        with self.voiceover(text="Thank you for watching our presentation on <bookmark mark='1'/> eQMARL, a quantum entangled approach for multi-agent reinforcement learning that facilitates <bookmark mark='2'/> implicit coordination without direct communication.", wait_kwargs=dict(frozen_frame=False)) as tracker:
             
             # Transform summary list into watermark at top-left.
-            self.wait_until_bookmark('1', frozen_frame=False)
-            self.play(ReplacementTransform(Group(self.summary_list, self.summary_header), self.eqmarl_acronym))
+            # self.wait_until_bookmark('1', frozen_frame=False)
+            self.play(ReplacementTransform(Group(self.summary_list, self.summary_header), self.eqmarl_acronym), run_time=tracker.time_until_bookmark('1'))
         
             # Shift and scale watermark to center as main title.
             self.play(self.eqmarl_acronym.animate.scale(2).move_to(ORIGIN).shift(UP*2), run_time=tracker.time_until_bookmark('2'))
@@ -1793,7 +1793,7 @@ class DemoForICAB(PausableScene, CustomVoiceoverScene):
         
         self.small_pause(frozen_frame=False)
         
-        with self.voiceover(text="Our work is published in The Thirteenth International Conference on Learning Representations, and the paper can be found online through archive by scanning the QR code below.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+        with self.voiceover(text="Our work is published in The Thirteenth International Conference on Learning Representations, and the paper can be found online through archive by scanning the QR code as shown.", wait_kwargs=dict(frozen_frame=False)) as tracker:
             # Show QR code.
             img.next_to(texts['subtitle'], DOWN)
             self.play(FadeIn(img))
