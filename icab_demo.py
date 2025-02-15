@@ -737,9 +737,9 @@ class DemoForICAB(PausableScene, CustomVoiceoverScene):
         sections: list[tuple[Callable, dict]] = [
             (self.section_title, dict(name="Title", skip_animations=False)), # First.
             # (self.section_scenario, dict(name="Scenario", skip_animations=False)),
-            (self.section_experiment, dict(name="Experiment", skip_animations=False)),
-            # (self.section_summary, dict(name="Summary", skip_animations=False)),
-            # (self.section_outro, dict(name="Outro", skip_animations=False)), # Last.
+            # (self.section_experiment, dict(name="Experiment", skip_animations=False)),
+            (self.section_summary, dict(name="Summary", skip_animations=False)),
+            (self.section_outro, dict(name="Outro", skip_animations=False)), # Last.
         ]
         for method, section_kwargs in sections:
             self.next_section(**section_kwargs)
@@ -775,7 +775,7 @@ class DemoForICAB(PausableScene, CustomVoiceoverScene):
         ]
         eqmarl_full.next_to(eqmarl_acronym, DOWN, buff=0.5)
         
-        self.subtitle_text = MarkupText("<i>Coordination without Communication</i>", font_size=28)
+        self.subtitle_text = MarkupText(f"<big><span fgcolor=\"{self.colors['action']}\">Coordination</span></big> <small>without</small> <big><span fgcolor=\"{self.colors['no']}\">Communication</span></big>", font_size=28)
         self.subtitle_text.next_to(eqmarl_full, DOWN, buff=0.5)
         
         # self.attribution_text_full = Text("Alexander DeRieux & Walid Saad", font_size=22)
@@ -2007,7 +2007,8 @@ class DemoForICAB(PausableScene, CustomVoiceoverScene):
         
         texts = {}
         # texts['subtitle'] = Text("Coordination without Communication", font_size=28)
-        texts['subtitle'] = MarkupText("<i>Coordination without Communication</i>", font_size=28)
+        # texts['subtitle'] = MarkupText("<i>Coordination without Communication</i>", font_size=28)
+        texts['subtitle'] = MarkupText(f"<big><span fgcolor=\"{self.colors['action']}\">Coordination</span></big> <small>without</small> <big><span fgcolor=\"{self.colors['no']}\">Communication</span></big>", font_size=28)
         # texts['attribution'] = Text("Alexander DeRieux & Walid Saad (2025)", font_size=24)
         texts['attribution'] = VGroup(
             Text("Alexander DeRieux & Walid Saad", font_size=22),
