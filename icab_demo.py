@@ -18,6 +18,10 @@ from manim_voiceover.services.openai import OpenAIService
 # from manim_voiceover.services.coqui import CoquiService
 import segno
 
+# Seed the random generator.
+RANDOM_SEED = 42
+random.seed(RANDOM_SEED)
+
 # config.disable_caching = True
 # config.quality = 'low_quality'
 
@@ -249,6 +253,11 @@ class RotationTrackableGroup(Group):
     
     def get_angle(self):
         return self._invisible_line.get_angle()
+    
+    def set_angle(self, angle: float, **kwargs):
+        current_angle = self.get_angle() * 180./PI # Degrees.
+        angle = angle * 180./PI # Degrees.
+        return self.rotate((angle - current_angle)*DEGREES, **kwargs)
 
 class RotationTrackableVGroup(RotationTrackableGroup, VGroup):
     """Facilitates tracking the rotation angle of VMObjects.
@@ -270,7 +279,7 @@ class MiniGrid(Group):
         'player': RotationTrackableVGroup(VGroup(*[
             Triangle(color=RED, fill_opacity=0.5),
             Dot(Triangle().get_top()) # Dot represents the leading tip of the player triangle.
-        ],z_index=1)).rotate(270*DEGREES), # Higher z-index sets on top.
+        ],z_index=1)), # .rotate(270*DEGREES), # Higher z-index sets on top.
         # 'player': RotationTrackableGroup(Group(*[
         #     ImageMobject("assets/images/quadcopter.png").scale(0.5),
         #     # Dot(Triangle().get_top()) # Dot represents the leading tip of the player triangle.
@@ -281,10 +290,10 @@ class MiniGrid(Group):
     
     def __init__(self, 
         grid_size: tuple[int,int], 
-        player_look_angle: float = 270, # degrees, RIGHT
-        player_grid_pos: tuple[int,int] = (0,0), # Top-left.
-        goal_grid_pos: tuple[int,int] = (-1, -1),
         hazards_grid_pos: list[tuple[int,int]] = [],
+        goal_grid_pos: tuple[int,int] = (-1, -1),
+        player_grid_pos: tuple[int,int] = (0,0), # Top-left.
+        player_look_angle: float = 270*DEGREES, # degrees, RIGHT
         **kwargs,
         ):
         super().__init__(**kwargs)
@@ -299,32 +308,105 @@ class MiniGrid(Group):
         self.hazards_grid_pos = hazards_grid_pos
         
         # Build the grid using assets.
-        world_dict = self.build_minigrid(
+        grid = self.build_minigrid(
             grid_size=grid_size,
-            player_pos=player_grid_pos,
             goal_pos=self.goal_pos,
             hazards=self.hazards_grid_pos,
             grid_obj_default=self.assets['grid-empty'],
             grid_obj_hazard=self.assets['grid-lava'],
             grid_obj_goal=self.assets['grid-goal'],
-            grid_obj_player=self.assets['player'],
         )
-        self.world = world_dict
+        
+        # Create the player.
+        player = self.assets['player'].copy()
+        player_target_pos = grid[player_grid_pos[0]*grid_size[0] + player_grid_pos[1]].get_center()
+        player.move_to(player_target_pos) # Move player to grid position.
+        player.rotate(player_look_angle) # Rotate player.
+        
+        self.scale_factor = 1
+        
+        # Preserve the grid and player objects in a dictionary.
+        self.world = {
+            'player': player,
+            'grid': grid,
+        }
 
         # IMPORTANT - we must add all sub-objects that we want displayed.
-        self.add(*[m for k, m in world_dict.items()])
+        self.add(*[m for _, m in self.world.items()])
+        
+    def scale(self, scale_factor: float, **kwargs):
+        self.scale_factor = scale_factor # Keep track of any scaling.
+        return super().scale(scale_factor, **kwargs)
+    
+    def alter_grid(self, 
+        # hazards_grid_pos: list[tuple[int,int]],
+        hazards_grid_pos: list[tuple[int,int]] = None,
+        goal_grid_pos: tuple[int,int] = None,
+        ) -> 'MiniGrid':
+        
+        grid_size = self.get_grid_size()
+        
+        if goal_grid_pos is None:
+            goal_grid_pos = self.get_goal_pos()
+        if hazards_grid_pos is None:
+            hazards_grid_pos = self.get_hazards_pos()
+        
+        goal_grid_pos = tuple(negative_index_rollover(i, size) for i,size in zip(goal_grid_pos, grid_size))
+        hazards_grid_pos = [tuple(negative_index_rollover(i, size) for i,size in zip(haz, grid_size)) for haz in hazards_grid_pos]
+
+        # Generate a new grid.
+        new_grid = self.build_minigrid(
+            grid_size=grid_size,
+            grid_obj_default=self.assets['grid-empty'],
+            grid_obj_hazard=self.assets['grid-lava'],
+            grid_obj_goal=self.assets['grid-goal'],
+            goal_pos=goal_grid_pos,
+            hazards=hazards_grid_pos,
+        )
+        
+        # Update the goal and hazard positions for the current grid.
+        self.goal_pos = goal_grid_pos
+        self.hazards_grid_pos = hazards_grid_pos
+        
+        # Match the existing grid's scale and position.
+        new_grid.scale(self.scale_factor).move_to(self.world['grid'].get_center())
+        
+        # Replace the existing grid with the new grid.
+        self.remove(self.world['grid'])
+        self.add(new_grid)
+        self.world['grid'] = new_grid
+        
+        return self
+    
+    def set_player_angle(self, angle: float, **kwargs):
+        self.get_player().set_angle(angle, **kwargs)
+        return self
+    
+    def move_player_to_pos(self, pos: tuple[int, int]):
+        pos = tuple(negative_index_rollover(i, size) for i,size in zip(pos, self.get_grid_size()))
+        self.get_player().move_to(self.pos_to_coord(pos))
+        print(f"{self.get_player_pos()=}")
+        return self
     
     def pos_to_index(self, pos: tuple[int,int]) -> int:
         """Converts a 2D position to a 1D index."""
+        # Handle negative index rollover.
+        pos = tuple(negative_index_rollover(i, size) for i,size in zip(pos, self.get_grid_size()))
         return pos[0]*self.grid_size[0] + pos[1]
     
     def index_to_pos(self, index: int) -> tuple[int,int]:
         """Converts a 1D index to a 2D position."""
-        return (index//self.grid_size[0], index%self.grid_size[1])
+        r, c = self.get_grid_size()
+        if index < 0: # Handle negative index rollover.
+            index = r * c - index
+        pos = (index//r, index%c)
+        return pos
 
     def pos_to_coord(self, pos: tuple[int,int]) -> Point3D:
         """2D grid position to 3D frame coordinate."""
-        return self.world['grid'][self.pos_to_index(pos)].get_center() # 3D frame coordinate of grid element.
+        pos = tuple(negative_index_rollover(i, size) for i,size in zip(pos, self.get_grid_size()))
+        return self.get_grid_at_pos(pos).get_center() # 3D frame coordinate of grid element.
+        # return self.world['grid'][self.pos_to_index(pos)].get_center() # 3D frame coordinate of grid element.
     
     def coord_to_index(self, coord: Point3D) -> int:
         """Convert 3D vector coordinate to a 1D grid position index.
@@ -332,8 +414,9 @@ class MiniGrid(Group):
         This snaps the 3D coordinate to a 2D position on the grid based on the element's 1D index within the grid.
         Gets the closest grid position based on it's center point.
         """
-        closest_mobject = min(self.world['grid'], key=lambda g: np.linalg.norm(g.get_center() - coord))
-        closest_index = self.world['grid'].submobjects.index(closest_mobject)
+        grid = self.get_grid()
+        closest_mobject = min(grid, key=lambda g: np.linalg.norm(g.get_center() - coord))
+        closest_index = grid.submobjects.index(closest_mobject)
         return closest_index
 
     def coord_to_pos(self, coord: Point3D) -> tuple[int,int]:
@@ -344,6 +427,10 @@ class MiniGrid(Group):
         """
         closest_index = self.coord_to_index(coord)
         return self.index_to_pos(closest_index)
+
+    def get_grid_size(self) -> tuple[int, int]:
+        """Gets the size of the grid as the tuple (rows, columns)."""
+        return self.grid_size
 
     def get_player_coord(self) -> Point3D:
         """Get player position as 3D scene coordinate."""
@@ -356,6 +443,9 @@ class MiniGrid(Group):
 
     def get_player(self) -> Mobject:
         return self.world['player']
+
+    def get_grid(self) -> Mobject:
+        return self.world['grid']
 
     def get_goal_coord(self) -> Point3D:
         """Get goal position as 3D scene coordinate."""
@@ -371,11 +461,16 @@ class MiniGrid(Group):
     
     def get_grid_at_pos(self, pos: tuple[int,int]) -> Mobject:
         """Get grid MObject at 2D grid position (row, col)."""
+        pos = tuple(negative_index_rollover(i, size) for i,size in zip(pos, self.get_grid_size()))
         return self.world['grid'][self.pos_to_index(pos)]
     
     def get_hazards_pos(self) -> list[tuple[int,int]]:
         """Get list of hazard grid positions (row, col)."""
         return self.hazards_grid_pos
+
+    def get_player_look_angle(self) -> float:
+        """Gets the current player look angle in radians."""
+        return self.world['player'].get_angle()
 
     @staticmethod
     def build_minigrid(
@@ -383,51 +478,50 @@ class MiniGrid(Group):
         grid_obj_default: Mobject,
         grid_obj_hazard: Mobject,
         grid_obj_goal: Mobject,
-        grid_obj_player: Mobject,
-        player_pos: tuple[int, int] | None = None, # Defaults to top-left.
+        # grid_obj_player: Mobject,
+        # player_pos: tuple[int, int] | None = None, # Defaults to top-left.
         goal_pos: tuple[int, int] | None = None, # Defaults to bottom-right.
         hazards: list[tuple[int, int]] = [],
-        ) -> dict:
+        ) -> VGroup:
         """Helper function to generate a MiniGrid environment.
         
         Returns a 2D matrix of Manim `VMobject`.
         """
-        if player_pos == None: # Defaults to top-left.
-            player_pos = (0,0)
+        # if player_pos == None: # Defaults to top-left.
+        #     player_pos = (0,0)
         if goal_pos == None: # Defaults to bottom-right.
             goal_pos = (grid_size[0]-1, grid_size[1]-1)
         
         # Support for negative indexing.
-        if any(i < 0 for i in player_pos):
-            player_pos = tuple(negative_index_rollover(i, size) for i,size in zip(player_pos, grid_size))
+        # if any(i < 0 for i in player_pos):
+        #     player_pos = tuple(negative_index_rollover(i, size) for i,size in zip(player_pos, grid_size))
         if any(i < 0 for i in goal_pos):
             goal_pos = tuple(negative_index_rollover(i, size) for i,size in zip(goal_pos, grid_size))
         if any(i < 0 for haz in hazards for i in haz):
             hazards = [tuple(negative_index_rollover(i, size) for i,size in zip(haz, grid_size)) for haz in hazards]
 
         # Build the grid.
-        rows = []
-        for r in range(grid_size[0]):
-            cols = []
-            for c in range(grid_size[1]):
-                if (r,c) == goal_pos:
-                    cols.append(grid_obj_goal.copy())
-                elif (r,c) in hazards:
-                    cols.append(grid_obj_hazard.copy())
-                else:
-                    cols.append(grid_obj_default.copy())
-            rows.append(cols)
-        
-        grid = VGroup(*[o for o in itertools.chain(*rows)])
+        items = []
+        for r, c in itertools.product(range(grid_size[0]), range(grid_size[0])):
+            if (r,c) == goal_pos:
+                items.append(grid_obj_goal.copy())
+            elif (r,c) in hazards:
+                items.append(grid_obj_hazard.copy())
+            else:
+                items.append(grid_obj_default.copy())
+
+        grid = VGroup(*[o for o in items])
         grid.arrange_in_grid(rows=grid_size[0], cols=grid_size[1], buff=0)
         
-        player = grid_obj_player.copy()
-        player_target_pos = grid[player_pos[0]*grid_size[0] + player_pos[1]].get_center()
-        player.move_to(player_target_pos)
-        return {
-            'player': player,
-            'grid': grid,
-        }
+        return grid
+        
+        # player = grid_obj_player.copy()
+        # player_target_pos = grid[player_pos[0]*grid_size[0] + player_pos[1]].get_center()
+        # player.move_to(player_target_pos)
+        # return {
+        #     'player': player,
+        #     'grid': grid,
+        # }
 
     @staticmethod
     def round_to_nearest_angle(angle: float) -> int:
@@ -603,22 +697,25 @@ class DemoForICAB(PausableScene, CustomVoiceoverScene):
     def construct(self):
         # Configure AI text-to-speech service.
         # See Manim Voiceover quickstart for details: https://voiceover.manim.community/en/latest/quickstart.html
-        # self.set_speech_service(GTTSService(
-        #     lang="en",
-        #     tld="com",
-        #     global_speed=1.15,
-        #     transcription_model='base',
-        # ))
-        self.set_speech_service(
-            OpenAIService(
-                voice="sage",
-                model="tts-1", # Best audio and pronunciation.
-                # model="tts-1-hd",
-                # global_speed=1.15,
-                global_speed=1.1,
-                transcription_model='base',
-            )
-        )
+        
+        # Use GTTS for debugging.
+        self.set_speech_service(GTTSService(
+            lang="en",
+            tld="com",
+            global_speed=1.15,
+            transcription_model='base',
+        ))
+        # # Use OpenAI TTS for production.
+        # self.set_speech_service(
+        #     OpenAIService(
+        #         voice="sage",
+        #         model="tts-1", # Best audio and pronunciation.
+        #         # model="tts-1-hd",
+        #         # global_speed=1.15,
+        #         global_speed=1.1,
+        #         transcription_model='base',
+        #     )
+        # )
         
         # Colorway.
         self.colors = {
@@ -639,10 +736,10 @@ class DemoForICAB(PausableScene, CustomVoiceoverScene):
         # Sections can be tested individually, to do this set `skip_animations=True` to turn off all other sections not used (note that the section will still be generated, allowing objects to move to their final position for use with future sections in the pipeline).
         sections: list[tuple[Callable, dict]] = [
             (self.section_title, dict(name="Title", skip_animations=False)), # First.
-            (self.section_scenario, dict(name="Scenario", skip_animations=False)),
+            # (self.section_scenario, dict(name="Scenario", skip_animations=False)),
             (self.section_experiment, dict(name="Experiment", skip_animations=False)),
-            (self.section_summary, dict(name="Summary", skip_animations=False)),
-            (self.section_outro, dict(name="Outro", skip_animations=False)), # Last.
+            # (self.section_summary, dict(name="Summary", skip_animations=False)),
+            # (self.section_outro, dict(name="Outro", skip_animations=False)), # Last.
         ]
         for method, section_kwargs in sections:
             self.next_section(**section_kwargs)
@@ -1311,18 +1408,26 @@ class DemoForICAB(PausableScene, CustomVoiceoverScene):
         orig_left = objs['grid-big-left'].copy()
         orig_right = objs['grid-big-right'].copy()
         with self.voiceover(text="The drones are not able to directly communicate with each other, due to the gap between them.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+            path_left = 'ff'
+            path_right='rff'
             self.play(ReplacementTransform(objs['text-exp-5'], objs['text-exp-6'])) # Cannot communicate.
             self.play(
-                objs['grid-big-left'].obj.animate_actions(*minigrid_path_str_to_list('ff')),
-                objs['grid-big-right'].obj.animate_actions(*minigrid_path_str_to_list('rff')),
-                run_time=2,
+                AnimationGroup(
+                    objs['grid-big-left'].obj.animate_actions(*minigrid_path_str_to_list(path_left), run_time=len(path_left)/2.),
+                    objs['grid-big-right'].obj.animate_actions(*minigrid_path_str_to_list(path_right), run_time=len(path_right)/2.),
+                ),
+                # run_time=2,
             )
         with self.voiceover(text="From a learning perspective, this means that they are not able to coordinate using shared experiences.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+            path_left = 'rf'
+            path_right='flf'
             self.play(ReplacementTransform(objs['text-exp-6'], objs['text-exp-7'])) # Cannot coordinate.
             self.play(
-                    objs['grid-big-left'].obj.animate_actions(*minigrid_path_str_to_list('rf')),
-                    objs['grid-big-right'].obj.animate_actions(*minigrid_path_str_to_list('flf')),
-                    run_time=2,
+                    AnimationGroup(
+                        objs['grid-big-left'].obj.animate_actions(*minigrid_path_str_to_list(path_left), run_time=len(path_left)/2.),
+                        objs['grid-big-right'].obj.animate_actions(*minigrid_path_str_to_list(path_right), run_time=len(path_right)/2.),
+                    ),
+                    # run_time=2,
                 )
         # with self.voiceover(text="From a learning perspective, this means that they are not able to coordinate using shared experiences. This is a problem because, we see that drone A fell into the lava, and the information it learned could be helpful for drone B to learn to avoid the hazard, but the lack of direct communication means that drone B will not know what happened and must experience the hazard itself.", wait_kwargs=dict(frozen_frame=False)) as tracker:
         self.play(
@@ -1342,9 +1447,11 @@ class DemoForICAB(PausableScene, CustomVoiceoverScene):
             objs['text-exp-7-1'] = Text("This is a problem because drone A fell into the lava", font_size=32).to_edge(UP, buff=1.5)
             self.play(ReplacementTransform(objs['text-exp-7'], objs['text-exp-7-1']))
             self.play(
-                objs['grid-big-left'].obj.animate_actions(*minigrid_path_str_to_list(path_left)),
-                objs['grid-big-right'].obj.animate_actions(*minigrid_path_str_to_list(path_right)),
-                run_time=2,
+                AnimationGroup(
+                    objs['grid-big-left'].obj.animate_actions(*minigrid_path_str_to_list(path_left), run_time=len(path_left)/2.),
+                    objs['grid-big-right'].obj.animate_actions(*minigrid_path_str_to_list(path_right), run_time=len(path_right)/2.),
+                )
+                # run_time=2,
             )
             self.play(
                 ReplacementTransform(objs['grid-big-left'], orig_left),
@@ -1359,9 +1466,11 @@ class DemoForICAB(PausableScene, CustomVoiceoverScene):
             objs['text-exp-7-2'] = Text("drone A's experiences could help drone B avoid the hazard", font_size=32).to_edge(UP, buff=1.5)
             self.play(ReplacementTransform(objs['text-exp-7-1'], objs['text-exp-7-2']))
             self.play(
-                objs['grid-big-left'].obj.animate_actions(*minigrid_path_str_to_list(path_left)),
-                objs['grid-big-right'].obj.animate_actions(*minigrid_path_str_to_list(path_right)),
-                run_time=2,
+                AnimationGroup(
+                    objs['grid-big-left'].obj.animate_actions(*minigrid_path_str_to_list(path_left), run_time=len(path_left)/2.),
+                    objs['grid-big-right'].obj.animate_actions(*minigrid_path_str_to_list(path_right), run_time=len(path_right)/2.),
+                )
+                # run_time=2,
             )
             self.play(
                 ReplacementTransform(objs['grid-big-left'], orig_left),
@@ -1377,9 +1486,11 @@ class DemoForICAB(PausableScene, CustomVoiceoverScene):
             self.play(ReplacementTransform(objs['text-exp-7-2'], objs['text-exp-7-3']))
             while tracker.get_remaining_duration() > 0:
                 self.play(
-                    objs['grid-big-left'].obj.animate_actions(*minigrid_path_str_to_list(path_left)),
-                    objs['grid-big-right'].obj.animate_actions(*minigrid_path_str_to_list(path_right)),
-                    run_time=2,
+                    AnimationGroup(
+                        objs['grid-big-left'].obj.animate_actions(*minigrid_path_str_to_list(path_left), run_time=len(path_left)/2.),
+                        objs['grid-big-right'].obj.animate_actions(*minigrid_path_str_to_list(path_right), run_time=len(path_right)/2.),
+                    )
+                    # run_time=2,
                 )
                 if tracker.get_remaining_duration() > 0:
                     self.play(
@@ -1721,7 +1832,7 @@ class DemoForICAB(PausableScene, CustomVoiceoverScene):
         )
 
         objs['text-exp-14'] = Text("These are our baselines", font_size=32).next_to(group_graphs['legend-box'], UP)
-        with self.voiceover(text="These are our baseline models for comparison.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+        with self.voiceover(text="These are our baseline models for comparison. The orange is a baseline that uses classical (i.e., non-quantum) computing methods, and the magenta is a quantum baseline that does not use entanglement between the drones.", wait_kwargs=dict(frozen_frame=False)) as tracker:
             self.play(Write(objs['text-exp-14']))
             self.play(Write(group_graphs['legend-box']))
             self.play(
@@ -1729,12 +1840,17 @@ class DemoForICAB(PausableScene, CustomVoiceoverScene):
                 Write(group_graphs['legend']['qfctde']),
                 # Write(group_graphs['legend']['sctde']),
             )
+            
+            # Add all the plot series so they can be shown.
+            # We add them here to take up the rest of the audio time.
+            for series_kwargs in series:
+                self.add(group_graphs['series'][series_kwargs['key']]['mean'])
         
-        self.small_pause(frozen_frame=False)
+        # self.small_pause(frozen_frame=False)
         
         
         objs['text-exp-15'] = Text("and this is eQMARL", font_size=32).next_to(group_graphs['legend-box'], UP)
-        with self.voiceover(text="And this is our proposed approach.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+        with self.voiceover(text="This blue line represents our proposed approach.", wait_kwargs=dict(frozen_frame=False)) as tracker:
             self.play(
                 ReplacementTransform(objs['text-exp-14'], objs['text-exp-15']),
                 Write(group_graphs['legend']['eqmarl-psi+']),
@@ -1742,9 +1858,9 @@ class DemoForICAB(PausableScene, CustomVoiceoverScene):
         self.small_pause(frozen_frame=False)
         self.play(FadeOut(objs['text-exp-15']))
         
-        # Add all the plot series so they can be shown.
-        for series_kwargs in series:
-            self.add(group_graphs['series'][series_kwargs['key']]['mean'])
+        # # Add all the plot series so they can be shown.
+        # for series_kwargs in series:
+        #     self.add(group_graphs['series'][series_kwargs['key']]['mean'])
 
         # Create a pointer for animating the epochs.
         pointer = always_redraw(
@@ -1758,8 +1874,32 @@ class DemoForICAB(PausableScene, CustomVoiceoverScene):
             lambda pointer=pointer: MathTex(f"t={tracker_x_value.get_value():.0f}", font_size=24).next_to(pointer, UP, buff=0.1)
         ).next_to(pointer, UP, buff=0.1)
         
+        
+        
+        def generate_random_grid_permutation_animations(grid: MiniGrid, n: int, regenerate_every_n: int = 100, k: int = 3) -> Succession:
+            random_actions = [random.choice(list(MinigridAction)) for _ in range(n)]
+            anims = []
+            for i, a in enumerate(random_actions):
+                anims.append(
+                    ApplyMethod(grid.move_player, a)
+                )
+                if i > 0 and i % regenerate_every_n == 0:
+                    # Randomly generate new hazards.
+                    new_haz_pos = random.sample(list(itertools.product(range(1, grid.grid_size[0]-1), range(1, grid.grid_size[1]-1))), k=k)
+                    anims.append(
+                        ApplyMethod(grid.alter_grid, new_haz_pos)
+                    )
+            # Ensure the player is at the goal position at the end of the animation sequence.
+            anims.append(
+                ApplyMethod(grid.move_player_to_pos, grid.get_goal_pos()),
+            )
+            anims.append(
+                ApplyMethod(grid.set_player_angle, 270*DEGREES),
+            )
+            return Succession(*anims)
+        
         objs['text-exp-16'] = Text("After 3,000 unique maze configurations...", font_size=32).next_to(group_graphs['legend-box'], UP)
-        with self.voiceover(text="After three-thousand unique maze configurations.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+        with self.voiceover(text="After three-thousand unique maze configurations, where each drone's maze is unique, and the locations of the lava hazards within each maze change with every permutation", wait_kwargs=dict(frozen_frame=False)) as tracker:
             self.play(Write(objs['text-exp-16']))
         
             # Add the pointer and label.
@@ -1768,27 +1908,25 @@ class DemoForICAB(PausableScene, CustomVoiceoverScene):
             # Animate the plots from left-to-right by setting the tracker value to the end value.
             self.play(
                 tracker_x_value.animate.set_value(x_range[-1]),
-                Succession(
-                    *[ApplyMethod(objs['grid-small-up'].obj.move_player, a) for a in [random.choice(list(MinigridAction)) for _ in range(x_range[-1])]],
-                    *[
-                        ApplyMethod(objs['grid-small-up'].obj.get_player().move_to, objs['grid-small-up'].obj.get_goal().get_center()),
-                    ],
+                generate_random_grid_permutation_animations(
+                    grid=objs['grid-small-up'].obj,
+                    n=x_range[-1],
+                    regenerate_every_n=100,
                 ),
-                Succession(
-                    *[ApplyMethod(objs['grid-small-down'].obj.move_player, a) for a in [random.choice(list(MinigridAction)) for _ in range(x_range[-1])]],
-                    *[
-                        ApplyMethod(objs['grid-small-down'].obj.get_player().move_to, objs['grid-small-down'].obj.get_goal().get_center()),
-                    ],
+                generate_random_grid_permutation_animations(
+                    grid=objs['grid-small-down'].obj,
+                    n=x_range[-1],
+                    regenerate_every_n=100,
                 ),
-                run_time=5,
+                run_time=tracker.get_remaining_duration(buff=0.5),
             )
             
             # Remove the pointer and tracker label.
-            self.play(FadeOut(pointer), FadeOut(label))
+            self.play(FadeOut(pointer), FadeOut(label), run_time=0.5)
         
         # Emphasize score.
         objs['text-exp-17'] = MarkupText("The drones learn to achieve a <b>higher score</b>", font_size=32).next_to(group_graphs['legend-box'], UP)
-        with self.voiceover(text="The drones learn to achieve a higher score.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+        with self.voiceover(text="the drones learn to achieve a higher score", wait_kwargs=dict(frozen_frame=False)) as tracker:
             self.play(ReplacementTransform(objs['text-exp-16'], objs['text-exp-17']))
             for _ in range(2): # Repeat.
                 self.play(group_graphs['series'][series_kwargs['key']]['mean'].animate.set_stroke(8), rate_func=there_and_back, run_time=0.5)
@@ -1797,7 +1935,7 @@ class DemoForICAB(PausableScene, CustomVoiceoverScene):
         
         # Emphasize std.
         objs['text-exp-18'] = MarkupText("with <b>lower standard deviation</b> than baselines", font_size=32).next_to(group_graphs['legend-box'], UP)
-        with self.voiceover(text="With significantly lower standard deviation than the baselines.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+        with self.voiceover(text="with significantly lower standard deviation than the baselines.", wait_kwargs=dict(frozen_frame=False)) as tracker:
             self.play(ReplacementTransform(objs['text-exp-17'], objs['text-exp-18']))
             for series_kwargs in series:
                 self.play(FadeIn(group_graphs['series'][series_kwargs['key']]['std']), run_time=1)
