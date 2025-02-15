@@ -736,10 +736,10 @@ class DemoForICAB(PausableScene, CustomVoiceoverScene):
         # Sections can be tested individually, to do this set `skip_animations=True` to turn off all other sections not used (note that the section will still be generated, allowing objects to move to their final position for use with future sections in the pipeline).
         sections: list[tuple[Callable, dict]] = [
             (self.section_title, dict(name="Title", skip_animations=False)), # First.
-            # (self.section_scenario, dict(name="Scenario", skip_animations=False)),
-            # (self.section_experiment, dict(name="Experiment", skip_animations=False)),
+            (self.section_scenario, dict(name="Scenario", skip_animations=False)),
+            (self.section_experiment, dict(name="Experiment", skip_animations=False)),
             (self.section_summary, dict(name="Summary", skip_animations=False)),
-            (self.section_outro, dict(name="Outro", skip_animations=False)), # Last.
+            # (self.section_outro, dict(name="Outro", skip_animations=False)), # Last.
         ]
         for method, section_kwargs in sections:
             self.next_section(**section_kwargs)
@@ -1950,90 +1950,179 @@ class DemoForICAB(PausableScene, CustomVoiceoverScene):
     
     def section_summary(self):
         
-        self.summary_header = MarkupText("The key takeaways are:", font_size=36).to_edge(UP, buff=2)
-        self.summary_list = IconList(
-            *[
-                MarkupText("Quantum entangled learning can <b>improve performance</b> and <b>couple agent behavior</b>", font_size=28),
-                MarkupText(f"e<span fgcolor=\"{self.colors['quantum'].to_hex()}\">Q</span>MARL <b>enhances privacy</b> by eliminating experience sharing", font_size=28),
-                MarkupText(f"e<span fgcolor=\"{self.colors['quantum'].to_hex()}\">Q</span>MARL <b>dramatically reduces communication overhead</b>", font_size=28),
-                MarkupText(f"e<span fgcolor=\"{self.colors['quantum'].to_hex()}\">Q</span>MARL can be deployed to <b>learn diverse environments</b>", font_size=28),
+        # self.summary_header = MarkupText("The key takeaways are:", font_size=36).to_edge(UP, buff=2)
+        # self.summary_list = IconList(
+        #     *[
+        #         MarkupText("Quantum entangled learning can <b>improve performance</b> and <b>couple agent behavior</b>", font_size=28),
+        #         MarkupText(f"e<span fgcolor=\"{self.colors['quantum'].to_hex()}\">Q</span>MARL <b>enhances privacy</b> by eliminating experience sharing", font_size=28),
+        #         MarkupText(f"e<span fgcolor=\"{self.colors['quantum'].to_hex()}\">Q</span>MARL <b>dramatically reduces communication overhead</b>", font_size=28),
+        #         MarkupText(f"e<span fgcolor=\"{self.colors['quantum'].to_hex()}\">Q</span>MARL can be deployed to <b>learn diverse environments</b>", font_size=28),
+        #     ],
+        #     icon=Star(color=YELLOW, fill_opacity=0.5).scale(0.3),
+        #     buff=(.2, .5),
+        #     col_alignments='rl',
+        # ).next_to(self.summary_header, DOWN, buff=0.5)
+        
+        # with self.voiceover(text="The key takeaways are as follows.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+        #     self.play(Write(self.summary_header))
+        
+        # self.small_pause(frozen_frame=False)
+        
+        # # Get list of summary icons and text objects.
+        # icons, texts = tuple(zip(*list(self.summary_list.enumerate_rows())))
+        
+        # with self.voiceover(text="Quantum entangled learning can improve performance through coupled agent behavior.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+        #     self.play(Write(icons[0]), Write(texts[0]))
+        
+        # self.small_pause(frozen_frame=False)
+
+        # with self.voiceover(text="eQMARL enhances privacy by eliminating the sharing of local experiences through direct communication", wait_kwargs=dict(frozen_frame=False)) as tracker:
+        #     self.play(Write(icons[1]), Write(texts[1]))
+        
+        # self.small_pause(frozen_frame=False)
+
+        # with self.voiceover(text="it dramatically reduces communication overhead because experiences are never shared between agents", wait_kwargs=dict(frozen_frame=False)) as tracker:
+        #     self.play(Write(icons[2]), Write(texts[2]))
+        
+        # self.small_pause(frozen_frame=False)
+        
+        # with self.voiceover(text="and it can be deployed to learn a diverse set of environments, such as the wildfire and maze scenarios previously shown.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+        #     self.play(Write(icons[3]), Write(texts[3]))
+
+
+        ######################
+        circle = Circle(radius=2, color=GRAY_D).scale(0.75).rotate(90*DEGREES)
+        circle_dashed = DashedVMobject(circle).set_z_index(0.5)
+        takeaways_short_texts, takeaways_long_texts, voiceover_text, colors = zip(*[
+            [
+                MarkupText("Performance", font_size=24),
+                MarkupText("Quantum entangled learning can <b>improve performance</b> and <b>couple agent behavior</b>", font_size=24),
+                "Quantum entangled learning can improve performance through coupled agent behavior.",
+                PINK,
             ],
-            icon=Star(color=YELLOW, fill_opacity=0.5).scale(0.3),
-            buff=(.2, .5),
-            col_alignments='rl',
-        ).next_to(self.summary_header, DOWN, buff=0.5)
+            [
+                MarkupText(f"Privacy", font_size=24),
+                MarkupText(f"e<span fgcolor=\"{PURPLE.to_hex()}\">Q</span>MARL <b>enhances privacy</b> by eliminating experience sharing", font_size=24),
+                "eQMARL enhances privacy by eliminating the sharing of local experiences through direct communication",
+                BLUE,
+            ],
+            [
+                MarkupText(f"Efficiency", font_size=24),
+                MarkupText(f"e<span fgcolor=\"{PURPLE.to_hex()}\">Q</span>MARL <b>dramatically reduces communication overhead</b>", font_size=24),
+                "it dramatically reduces communication overhead because experiences are never shared between agents",
+                RED,
+            ],
+            [
+                MarkupText(f"Deployability", font_size=24),
+                MarkupText(f"e<span fgcolor=\"{PURPLE.to_hex()}\">Q</span>MARL can be deployed to <b>learn diverse environments</b>", font_size=24),
+                "and it can be deployed to learn a diverse set of environments, such as the wildfire and maze scenarios previously shown.",
+                ORANGE,
+            ],
+        ])
         
+        # takeaway_header = Text("Key Takeaways", font_size=28).move_to(circle.get_center())
         with self.voiceover(text="The key takeaways are as follows.", wait_kwargs=dict(frozen_frame=False)) as tracker:
-            self.play(Write(self.summary_header))
+            self.play(
+                self.eqmarl_acronym.animate.move_to(ORIGIN),
+            )
+            self.play(
+                Create(circle_dashed),
+                # Write(takeaway_header),
+            )
         
-        self.small_pause(frozen_frame=False)
-        
-        # Get list of summary icons and text objects.
-        icons, texts = tuple(zip(*list(self.summary_list.enumerate_rows())))
-        
-        with self.voiceover(text="Quantum entangled learning can improve performance through coupled agent behavior.", wait_kwargs=dict(frozen_frame=False)) as tracker:
-            self.play(Write(icons[0]), Write(texts[0]))
-        
-        self.small_pause(frozen_frame=False)
-
-        with self.voiceover(text="eQMARL enhances privacy by eliminating the sharing of local experiences through direct communication", wait_kwargs=dict(frozen_frame=False)) as tracker:
-            self.play(Write(icons[1]), Write(texts[1]))
-        
-        self.small_pause(frozen_frame=False)
-
-        with self.voiceover(text="it dramatically reduces communication overhead because experiences are never shared between agents", wait_kwargs=dict(frozen_frame=False)) as tracker:
-            self.play(Write(icons[2]), Write(texts[2]))
-        
-        self.small_pause(frozen_frame=False)
-        
-        with self.voiceover(text="and it can be deployed to learn a diverse set of environments, such as the wildfire and maze scenarios previously shown.", wait_kwargs=dict(frozen_frame=False)) as tracker:
-            self.play(Write(icons[3]), Write(texts[3]))
-
-        # for icon, text in self.summary_list.enumerate_rows():
-        #     self.play(Write(icon), Write(text))
-        #     self.wait(1)
-        
-        # self.medium_pause(frozen_frame=False)
-        self.small_pause(frozen_frame=False)
-
-    def section_outro(self):
-        """Outro section.
-        
-        This is the last section played in the video.
-        """
-        
-        qr = segno.make("https://arxiv.org/abs/2405.17486", micro=False, error='H')
-        img = SegnoQRCodeImageMobject(qr, scale=100, dark=GRAY_A.to_hex(), finder_dark=PURPLE.to_hex(), border=0, light=None).scale(0.1)
-        
-        texts = {}
-        # texts['subtitle'] = Text("Coordination without Communication", font_size=28)
-        # texts['subtitle'] = MarkupText("<i>Coordination without Communication</i>", font_size=28)
-        texts['subtitle'] = MarkupText(f"<big><span fgcolor=\"{self.colors['action']}\">Coordination</span></big> <small>without</small> <big><span fgcolor=\"{self.colors['no']}\">Communication</span></big>", font_size=28)
-        # texts['attribution'] = Text("Alexander DeRieux & Walid Saad (2025)", font_size=24)
-        texts['attribution'] = VGroup(
-            Text("Alexander DeRieux & Walid Saad", font_size=22),
-            MarkupText("Published in <i>The Thirteenth International Conference on Learning Representations (ICLR)</i> 2025", font_size=20),
-        ).arrange(DOWN, buff=0.2)
-        texts['arxiv'] = Text("Paper is available on arXiv", font_size=20)
-
-
-        with self.voiceover(text="Thank you for watching our presentation on <bookmark mark='1'/> eQMARL, a quantum entangled approach for multi-agent reinforcement learning that facilitates <bookmark mark='2'/> implicit coordination without direct communication.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+        directions = [UP, RIGHT, DOWN, LEFT]
+        groups_on_screen = VGroup()
+        for i, (ts, tl, tv, c) in enumerate(zip(takeaways_short_texts, takeaways_long_texts, voiceover_text, colors)):
+            ts.set_z_index(3)
+            ts.set_color(c)
+            box = Circle().surround(ts).set_z_index(2)
+            box.set_color(c)
+            group = VGroup(box, ts).next_to(circle, UP, buff=0.2)
+            tlg = VGroup(
+                BackgroundRectangle(tl, fill_opacity=1),
+                tl,
+            ).set_z_index(3).next_to(circle, UP, buff=0.2)
             
-            # Transform summary list into watermark at top-left.
-            # self.wait_until_bookmark('1', frozen_frame=False)
-            self.play(ReplacementTransform(Group(self.summary_list, self.summary_header), self.eqmarl_acronym), run_time=tracker.time_until_bookmark('1'))
+            with self.voiceover(text=tv, wait_kwargs=dict(frozen_frame=False)) as tracker:
+                self.play(Write(tlg))
+                # Wait until just before the voiceover finishes.
+                self.wait(tracker.get_remaining_duration(buff=-1), frozen_frame=False)
+                # Transition to the short boxed form of the text.
+                self.play(ReplacementTransform(tlg, group))
+                groups_on_screen.add(group)
+                if i < len(takeaways_short_texts) - 1: # Do not rotate on last item.
+                    # Rotate all the groups on the screen.
+                    anims = [
+                        g.animate.next_to(circle, directions[(j + 1)%len(directions)], buff=0.2)
+                        for j, g in enumerate(reversed(groups_on_screen))
+                    ]
+                    anims.append(circle_dashed.animate.rotate(-90*DEGREES))
+                    self.play(*anims, run_time=1)
         
-            # Shift and scale watermark to center as main title.
-            self.play(self.eqmarl_acronym.animate.scale(2).move_to(ORIGIN).shift(UP*2), run_time=tracker.time_until_bookmark('2'))
+        self.small_pause(frozen_frame=False)
+        
+        # Final remarks while key-point-circles orbit the center circle.
+        with self.voiceover(text="Each of these points of performance, privacy, efficiency, and deployability highlights the unique benefits of quantum computation and specifically quantum entanglement to machine learning applications. All of these points together comprise <bookmark mark='1'/> eQMARL, a quantum entangled approach for multi-agent reinforcement learning that <bookmark mark='2'/> facilitates implicit coordination without direct communication.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+        
+            # Offset outer circles to be on the 45-degree angles of the center circle.
+            directions = [UR, DR, DL, UL]
+            circle_scale = 0.85
+            circle.scale(circle_scale)
+            anims = [
+                circle_dashed.animate.scale(circle_scale).rotate(-90*DEGREES)
+            ]
+            anims += [
+                g.animate.next_to(circle, directions[j], buff=-0.5)
+                for j, g in enumerate(reversed(groups_on_screen))
+            ]
+            self.play(*anims, run_time=1)
             
-            # Show subtitle.
+            # Rotate around the center circle.
+            # To do this, create hidden circles with radius from 
+            # origin of center circle to origin of outer circle
+            # and move along the path of that hidden circle.
+            circle_copy = circle.copy()
+            anims = [
+                Rotate(circle_dashed, -2*PI, about_point=circle_dashed.get_center())
+            ]
+            circle_copy.rotate(-45*DEGREES) # Starts from top-right.
+            for j, g in enumerate(reversed(groups_on_screen)):
+                dist = np.linalg.norm(circle_copy.get_center() - g.get_center())
+                newcircle = circle_copy.copy().scale_to_fit_width(2*dist)
+                anims.append(
+                    MoveAlongPath(g, newcircle.reverse_direction())
+                )
+                circle_copy.rotate(-90*DEGREES) # clockwise.
+            circle_copy.rotate(+45*DEGREES) # Back to top.
+            self.play(*anims, run_time=max(1, tracker.time_until_bookmark('1')))
+            
+            self.wait_until_bookmark('1')
+            anims = [circle_dashed.animate.move_to(ORIGIN).scale(0)]
+            # anims += [g.animate.move_to(ORIGIN).scale(0) for g in groups_on_screen]
+            anims += [ReplacementTransform(g, self.eqmarl_acronym[1]) for g in groups_on_screen]
+            self.play(*anims, run_time=1)
+            self.play(self.eqmarl_acronym.animate.scale(2).move_to(ORIGIN).shift(UP*2))
+            
+            texts = {}
+            texts['subtitle'] = MarkupText(f"<big><span fgcolor=\"{self.colors['action']}\">Coordination</span></big> <small>without</small> <big><span fgcolor=\"{self.colors['no']}\">Communication</span></big>", font_size=28)
+            
             texts['subtitle'].next_to(self.eqmarl_acronym, DOWN)
             self.wait_until_bookmark('2', frozen_frame=False)
             self.play(Write(texts['subtitle']))
         
-        self.small_pause(frozen_frame=False)
         
-        with self.voiceover(text="Our work is published in The Thirteenth International Conference on Learning Representations, and the paper can be found online through archive by scanning the QR code as shown.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+        self.wait(1, frozen_frame=False)
+        
+        texts['attribution'] = VGroup(
+            Text("Alexander DeRieux & Walid Saad", font_size=22),
+            MarkupText("Published in <i>The Thirteenth International Conference on Learning Representations (ICLR)</i> 2025", font_size=20),
+        ).arrange(DOWN, buff=0.2)
+        texts['arxiv'] = Text("Paper is available on arXiv", font_size=18)
+        
+        qr = segno.make("https://arxiv.org/abs/2405.17486", micro=False, error='H')
+        img = SegnoQRCodeImageMobject(qr, scale=100, dark=GRAY_A.to_hex(), finder_dark=PURPLE.to_hex(), border=0, light=None).scale(0.1)
+        
+        with self.voiceover(text="Thank you for watching our presentation. Our work is published in The Thirteenth International Conference on Learning Representations, and the paper can be found online through archive by scanning the QR code as shown.", wait_kwargs=dict(frozen_frame=False)) as tracker:
             # Show QR code.
             img.next_to(texts['subtitle'], DOWN)
             self.play(FadeIn(img))
@@ -2048,3 +2137,163 @@ class DemoForICAB(PausableScene, CustomVoiceoverScene):
         
         # Wait.
         self.long_pause(frozen_frame=False)
+        
+        ######################
+
+        
+        # self.medium_pause(frozen_frame=False)
+        # self.small_pause(frozen_frame=False)
+
+    ###
+    # OUTRO IS NO LONGER REQUIRED, THE SUMMARY SECTION HANDLES THE ENDING.
+    ###
+
+    # def section_outro(self):
+    #     """Outro section.
+        
+    #     This is the last section played in the video.
+    #     """
+        
+    #     qr = segno.make("https://arxiv.org/abs/2405.17486", micro=False, error='H')
+    #     img = SegnoQRCodeImageMobject(qr, scale=100, dark=GRAY_A.to_hex(), finder_dark=PURPLE.to_hex(), border=0, light=None).scale(0.1)
+        
+    #     texts = {}
+    #     # texts['subtitle'] = Text("Coordination without Communication", font_size=28)
+    #     # texts['subtitle'] = MarkupText("<i>Coordination without Communication</i>", font_size=28)
+    #     texts['subtitle'] = MarkupText(f"<big><span fgcolor=\"{self.colors['action']}\">Coordination</span></big> <small>without</small> <big><span fgcolor=\"{self.colors['no']}\">Communication</span></big>", font_size=28)
+    #     # texts['attribution'] = Text("Alexander DeRieux & Walid Saad (2025)", font_size=24)
+    #     texts['attribution'] = VGroup(
+    #         Text("Alexander DeRieux & Walid Saad", font_size=22),
+    #         MarkupText("Published in <i>The Thirteenth International Conference on Learning Representations (ICLR)</i> 2025", font_size=20),
+    #     ).arrange(DOWN, buff=0.2)
+    #     texts['arxiv'] = Text("Paper is available on arXiv", font_size=20)
+
+
+    #     with self.voiceover(text="Thank you for watching our presentation on <bookmark mark='1'/> eQMARL, a quantum entangled approach for multi-agent reinforcement learning that facilitates <bookmark mark='2'/> implicit coordination without direct communication.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+            
+    #         # Transform summary list into watermark at top-left.
+    #         # self.wait_until_bookmark('1', frozen_frame=False)
+    #         self.play(ReplacementTransform(Group(self.summary_list, self.summary_header), self.eqmarl_acronym), run_time=tracker.time_until_bookmark('1'))
+        
+    #         # Shift and scale watermark to center as main title.
+    #         self.play(self.eqmarl_acronym.animate.scale(2).move_to(ORIGIN).shift(UP*2), run_time=tracker.time_until_bookmark('2'))
+            
+    #         # Show subtitle.
+    #         texts['subtitle'].next_to(self.eqmarl_acronym, DOWN)
+    #         self.wait_until_bookmark('2', frozen_frame=False)
+    #         self.play(Write(texts['subtitle']))
+        
+    #     self.small_pause(frozen_frame=False)
+        
+    #     with self.voiceover(text="Our work is published in The Thirteenth International Conference on Learning Representations, and the paper can be found online through archive by scanning the QR code as shown.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+    #         # Show QR code.
+    #         img.next_to(texts['subtitle'], DOWN)
+    #         self.play(FadeIn(img))
+            
+    #         # Show image text.
+    #         texts['arxiv'].next_to(img, DOWN)
+    #         self.play(Write(texts['arxiv']))
+        
+    #         # Show author names.
+    #         texts['attribution'].next_to(texts['arxiv'], DOWN*1.25)
+    #         self.play(ReplacementTransform(self.attribution_text, texts['attribution']))
+        
+    #     # Wait.
+    #     self.long_pause(frozen_frame=False)
+
+
+
+
+class Playground(Scene):
+    def construct(self):
+        
+        # # Create a circle
+        # circle = Circle(radius=2, color=BLUE)
+        
+        # # Define text boxes
+        # texts = ["Top", "Right", "Bottom", "Left"]
+        # positions = [UP, RIGHT, DOWN, LEFT]
+        
+        # text_boxes = VGroup(*[
+        #     SurroundingRectangle(Text(txt).move_to(circle.get_center() + pos), color=WHITE)
+        #     for txt, pos in zip(texts, positions)
+        # ])
+
+        # # Add elements to the scene
+        # self.play(Create(circle))
+        # self.play(LaggedStart(*[Create(tb) for tb in text_boxes], lag_ratio=0.3))
+        
+        # # Animate them moving outward
+        # self.play(*[
+        #     tb.animate.move_to(tb.get_center() * 1.5)
+        #     for tb in text_boxes
+        # ])
+        
+        
+        
+        
+        #########
+        
+        
+        circle = Circle(radius=2, color=GRAY_D)
+        circle_dashed = DashedVMobject(circle).set_z_index(0.5)
+        
+        takeaways_short_texts, takeaways_long_texts, colors = zip(*[
+            [
+                MarkupText("Enhance Performance", font_size=24),
+                MarkupText("Quantum entangled learning can <b>improve performance</b> and <b>couple agent behavior</b>", font_size=24),
+                PINK,
+            ],
+            [
+                MarkupText(f"Enhances Privacy", font_size=24),
+                MarkupText(f"e<span fgcolor=\"{PURPLE.to_hex()}\">Q</span>MARL <b>enhances privacy</b> by eliminating experience sharing", font_size=24),
+                BLUE,
+            ],
+            [
+                MarkupText(f"Reduces Communication Overhead", font_size=24),
+                MarkupText(f"e<span fgcolor=\"{PURPLE.to_hex()}\">Q</span>MARL <b>dramatically reduces communication overhead</b>", font_size=24),
+                RED,
+            ],
+            [
+                MarkupText(f"Learns Diverse Environments", font_size=24),
+                MarkupText(f"e<span fgcolor=\"{PURPLE.to_hex()}\">Q</span>MARL can be deployed to <b>learn diverse environments</b>", font_size=24),
+                ORANGE,
+            ],
+        ])
+        
+        directions = [UP, RIGHT, DOWN, LEFT]
+        groups_on_screen = VGroup()
+        for i, (ts, tl, c) in enumerate(zip(takeaways_short_texts, takeaways_long_texts, colors)):
+            ts.set_z_index(3)
+            ts.set_color(c)
+            box = SurroundingRectangle(ts, color=WHITE, corner_radius=0.1, buff=0.2).set_z_index(2)
+            box.set_color(c)
+            bg = BackgroundRectangle(box, fill_opacity=1).set_z_index(1)
+            group = VGroup(bg, box, ts)
+            tlg = VGroup(
+                BackgroundRectangle(tl, fill_opacity=1),
+                tl,
+            ).set_z_index(3).next_to(circle, UP, buff=0.1)
+            self.play(Write(tlg))
+            group.next_to(circle, UP, buff=0)
+            if i == 0:
+                self.play(
+                    ReplacementTransform(tlg, group),
+                    Create(circle_dashed),
+                )
+            else:
+                self.play(
+                    ReplacementTransform(tlg, group),
+                )
+            groups_on_screen.add(group)
+            if i < len(takeaways_short_texts) - 1: # Do not rotate on last item.
+                anims = [
+                    g.animate.next_to(circle, directions[(j + 1)%len(directions)], buff=0)
+                    for j, g in enumerate(reversed(groups_on_screen))
+                ]
+                anims.append(circle_dashed.animate.rotate(-90*DEGREES))
+                self.play(*anims, run_time=1)
+            
+            
+        
+        self.wait(1)
