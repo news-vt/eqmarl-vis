@@ -698,24 +698,22 @@ class DemoForICAB(PausableScene, CustomVoiceoverScene):
         # Configure AI text-to-speech service.
         # See Manim Voiceover quickstart for details: https://voiceover.manim.community/en/latest/quickstart.html
         
-        # Use GTTS for debugging.
-        self.set_speech_service(GTTSService(
-            lang="en",
-            tld="com",
-            global_speed=1.15,
-            transcription_model='base',
-        ))
-        # # Use OpenAI TTS for production.
-        # self.set_speech_service(
-        #     OpenAIService(
-        #         voice="sage",
-        #         model="tts-1", # Best audio and pronunciation.
-        #         # model="tts-1-hd",
-        #         # global_speed=1.15,
-        #         global_speed=1.1,
-        #         transcription_model='base',
-        #     )
-        # )
+        # # Use GTTS for debugging.
+        # self.set_speech_service(GTTSService(
+        #     lang="en",
+        #     tld="com",
+        #     global_speed=1.15,
+        #     transcription_model='base',
+        # ))
+        # Use OpenAI TTS for production.
+        self.set_speech_service(
+            OpenAIService(
+                voice="sage",
+                model="tts-1", # Best audio and pronunciation.
+                global_speed=1.1,
+                transcription_model='base',
+            )
+        )
         
         # Colorway.
         self.colors = {
@@ -805,7 +803,7 @@ class DemoForICAB(PausableScene, CustomVoiceoverScene):
         self.small_pause(frozen_frame=False)
         
         with self.voiceover(
-            text="""The key point of our work is that through quantum entanglement eQMARL enables swarms of AI agents to <bookmark mark='1'/>coordinate without direct communication.
+            text="""The key point of our work is that through quantum entanglement eQMARL enables swarms of AI agents to <bookmark mark='1'/> implicitly coordinate without direct communication.
             """
         ) as tracker:
             self.wait_until_bookmark('1', frozen_frame=False)
@@ -1832,7 +1830,7 @@ class DemoForICAB(PausableScene, CustomVoiceoverScene):
         )
 
         objs['text-exp-14'] = Text("These are our baselines", font_size=32).next_to(group_graphs['legend-box'], UP)
-        with self.voiceover(text="These are our baseline models for comparison. The orange is a baseline that uses classical (i.e., non-quantum) computing methods, and the magenta is a quantum baseline that does not use entanglement between the drones.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+        with self.voiceover(text="These are our baseline models for comparison. The orange is a baseline that uses classical, or non-quantum, computing methods, and the magenta is a quantum baseline that does not use entanglement between the drones.", wait_kwargs=dict(frozen_frame=False)) as tracker:
             self.play(Write(objs['text-exp-14']))
             self.play(Write(group_graphs['legend-box']))
             self.play(
@@ -1899,7 +1897,7 @@ class DemoForICAB(PausableScene, CustomVoiceoverScene):
             return Succession(*anims)
         
         objs['text-exp-16'] = Text("After 3,000 unique maze configurations...", font_size=32).next_to(group_graphs['legend-box'], UP)
-        with self.voiceover(text="After three-thousand unique maze configurations, where each drone's maze is unique, and the locations of the lava hazards within each maze change with every permutation", wait_kwargs=dict(frozen_frame=False)) as tracker:
+        with self.voiceover(text="After three-thousand unique maze configurations, where the locations of the lava hazards within each maze change with every permutation", wait_kwargs=dict(frozen_frame=False)) as tracker:
             self.play(Write(objs['text-exp-16']))
         
             # Add the pointer and label.
@@ -2025,10 +2023,9 @@ class DemoForICAB(PausableScene, CustomVoiceoverScene):
             self.play(
                 self.eqmarl_acronym.animate.move_to(ORIGIN),
             )
-            self.play(
-                Create(circle_dashed),
-                # Write(takeaway_header),
-            )
+            # self.play(
+            #     Create(circle_dashed),
+            # )
         
         directions = [UP, RIGHT, DOWN, LEFT]
         groups_on_screen = VGroup()
@@ -2056,21 +2053,23 @@ class DemoForICAB(PausableScene, CustomVoiceoverScene):
                         g.animate.next_to(circle, directions[(j + 1)%len(directions)], buff=0.2)
                         for j, g in enumerate(reversed(groups_on_screen))
                     ]
-                    anims.append(circle_dashed.animate.rotate(-90*DEGREES))
+                    # anims.append(circle_dashed.animate.rotate(-90*DEGREES))
                     self.play(*anims, run_time=1)
         
         self.small_pause(frozen_frame=False)
         
         # Final remarks while key-point-circles orbit the center circle.
-        with self.voiceover(text="Each of these points of performance, privacy, efficiency, and deployability highlights the unique benefits of quantum computation and specifically quantum entanglement to machine learning applications. All of these points together comprise <bookmark mark='1'/> eQMARL, a quantum entangled approach for multi-agent reinforcement learning that <bookmark mark='2'/> facilitates implicit coordination without direct communication.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+        # with self.voiceover(text="The increased performance, enhanced privacy, improved communication efficiency, and diverse deployability benefits highlight the unique benefits of quantum computation and specifically quantum entanglement to machine learning applications. All of this together comprises <bookmark mark='1'/> eQMARL, a quantum entangled approach for multi-agent reinforcement learning that <bookmark mark='2'/> facilitates implicit coordination without direct communication.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+        with self.voiceover(text="The increased performance, enhanced privacy, improved communication efficiency, and diverse deployability highlight the benefits of quantum computation, and specifically quantum entanglement, as highly applicable tools in multi-agent machine learning applications. These advantages form the foundation of our proposed <bookmark mark='1'/> eQMARL, a uniquely quantum approach to multi-agent reinforcement learning that uses quantum entanglement to <bookmark mark='2'/> enable implicit coordination without direct communication.", wait_kwargs=dict(frozen_frame=False)) as tracker:
         
             # Offset outer circles to be on the 45-degree angles of the center circle.
             directions = [UR, DR, DL, UL]
             circle_scale = 0.85
             circle.scale(circle_scale)
-            anims = [
-                circle_dashed.animate.scale(circle_scale).rotate(-90*DEGREES)
-            ]
+            anims = []
+            # anims += [
+            #     circle_dashed.animate.scale(circle_scale).rotate(-90*DEGREES)
+            # ]
             anims += [
                 g.animate.next_to(circle, directions[j], buff=-0.5)
                 for j, g in enumerate(reversed(groups_on_screen))
@@ -2082,9 +2081,10 @@ class DemoForICAB(PausableScene, CustomVoiceoverScene):
             # origin of center circle to origin of outer circle
             # and move along the path of that hidden circle.
             circle_copy = circle.copy()
-            anims = [
-                Rotate(circle_dashed, -2*PI, about_point=circle_dashed.get_center())
-            ]
+            anims = []
+            # anims += [
+            #     Rotate(circle_dashed, -2*PI, about_point=circle_dashed.get_center())
+            # ]
             circle_copy.rotate(-45*DEGREES) # Starts from top-right.
             for j, g in enumerate(reversed(groups_on_screen)):
                 dist = np.linalg.norm(circle_copy.get_center() - g.get_center())
@@ -2097,8 +2097,8 @@ class DemoForICAB(PausableScene, CustomVoiceoverScene):
             self.play(*anims, run_time=max(1, tracker.time_until_bookmark('1')))
             
             self.wait_until_bookmark('1')
-            anims = [circle_dashed.animate.move_to(ORIGIN).scale(0)]
-            # anims += [g.animate.move_to(ORIGIN).scale(0) for g in groups_on_screen]
+            anims = []
+            # anims += [circle_dashed.animate.move_to(ORIGIN).scale(0)]
             anims += [ReplacementTransform(g, self.eqmarl_acronym[1]) for g in groups_on_screen]
             self.play(*anims, run_time=1)
             self.play(self.eqmarl_acronym.animate.scale(2).move_to(ORIGIN).shift(UP*2))
