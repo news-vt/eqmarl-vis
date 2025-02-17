@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from enum import IntEnum
 import itertools
 import glob
@@ -7,11 +8,19 @@ import random
 import pandas as pd
 from pathlib import Path
 import tempfile
-from typing import Any, Callable, Iterable
+from typing import Any, Callable, Generator, Iterable, Optional
 
 from manim import *
 from manim.typing import *
+from manim_voiceover import VoiceoverScene, VoiceoverTracker
+from manim_voiceover.services.gtts import GTTSService
+from manim_voiceover.services.openai import OpenAIService
+# from manim_voiceover.services.coqui import CoquiService
 import segno
+
+# Seed the random generator.
+RANDOM_SEED = 42
+random.seed(RANDOM_SEED)
 
 # config.disable_caching = True
 # config.quality = 'low_quality'
@@ -244,6 +253,11 @@ class RotationTrackableGroup(Group):
     
     def get_angle(self):
         return self._invisible_line.get_angle()
+    
+    def set_angle(self, angle: float, **kwargs):
+        current_angle = self.get_angle() * 180./PI # Degrees.
+        angle = angle * 180./PI # Degrees.
+        return self.rotate((angle - current_angle)*DEGREES, **kwargs)
 
 class RotationTrackableVGroup(RotationTrackableGroup, VGroup):
     """Facilitates tracking the rotation angle of VMObjects.
@@ -265,7 +279,7 @@ class MiniGrid(Group):
         'player': RotationTrackableVGroup(VGroup(*[
             Triangle(color=RED, fill_opacity=0.5),
             Dot(Triangle().get_top()) # Dot represents the leading tip of the player triangle.
-        ],z_index=1)).rotate(270*DEGREES), # Higher z-index sets on top.
+        ],z_index=1)), # .rotate(270*DEGREES), # Higher z-index sets on top.
         # 'player': RotationTrackableGroup(Group(*[
         #     ImageMobject("assets/images/quadcopter.png").scale(0.5),
         #     # Dot(Triangle().get_top()) # Dot represents the leading tip of the player triangle.
@@ -276,10 +290,10 @@ class MiniGrid(Group):
     
     def __init__(self, 
         grid_size: tuple[int,int], 
-        player_look_angle: float = 270, # degrees, RIGHT
-        player_grid_pos: tuple[int,int] = (0,0), # Top-left.
-        goal_grid_pos: tuple[int,int] = (-1, -1),
         hazards_grid_pos: list[tuple[int,int]] = [],
+        goal_grid_pos: tuple[int,int] = (-1, -1),
+        player_grid_pos: tuple[int,int] = (0,0), # Top-left.
+        player_look_angle: float = 270*DEGREES, # degrees, RIGHT
         **kwargs,
         ):
         super().__init__(**kwargs)
@@ -294,32 +308,105 @@ class MiniGrid(Group):
         self.hazards_grid_pos = hazards_grid_pos
         
         # Build the grid using assets.
-        world_dict = self.build_minigrid(
+        grid = self.build_minigrid(
             grid_size=grid_size,
-            player_pos=player_grid_pos,
             goal_pos=self.goal_pos,
             hazards=self.hazards_grid_pos,
             grid_obj_default=self.assets['grid-empty'],
             grid_obj_hazard=self.assets['grid-lava'],
             grid_obj_goal=self.assets['grid-goal'],
-            grid_obj_player=self.assets['player'],
         )
-        self.world = world_dict
+        
+        # Create the player.
+        player = self.assets['player'].copy()
+        player_target_pos = grid[player_grid_pos[0]*grid_size[0] + player_grid_pos[1]].get_center()
+        player.move_to(player_target_pos) # Move player to grid position.
+        player.rotate(player_look_angle) # Rotate player.
+        
+        self.scale_factor = 1
+        
+        # Preserve the grid and player objects in a dictionary.
+        self.world = {
+            'player': player,
+            'grid': grid,
+        }
 
         # IMPORTANT - we must add all sub-objects that we want displayed.
-        self.add(*[m for k, m in world_dict.items()])
+        self.add(*[m for _, m in self.world.items()])
+        
+    def scale(self, scale_factor: float, **kwargs):
+        self.scale_factor = scale_factor # Keep track of any scaling.
+        return super().scale(scale_factor, **kwargs)
+    
+    def alter_grid(self, 
+        # hazards_grid_pos: list[tuple[int,int]],
+        hazards_grid_pos: list[tuple[int,int]] = None,
+        goal_grid_pos: tuple[int,int] = None,
+        ) -> 'MiniGrid':
+        
+        grid_size = self.get_grid_size()
+        
+        if goal_grid_pos is None:
+            goal_grid_pos = self.get_goal_pos()
+        if hazards_grid_pos is None:
+            hazards_grid_pos = self.get_hazards_pos()
+        
+        goal_grid_pos = tuple(negative_index_rollover(i, size) for i,size in zip(goal_grid_pos, grid_size))
+        hazards_grid_pos = [tuple(negative_index_rollover(i, size) for i,size in zip(haz, grid_size)) for haz in hazards_grid_pos]
+
+        # Generate a new grid.
+        new_grid = self.build_minigrid(
+            grid_size=grid_size,
+            grid_obj_default=self.assets['grid-empty'],
+            grid_obj_hazard=self.assets['grid-lava'],
+            grid_obj_goal=self.assets['grid-goal'],
+            goal_pos=goal_grid_pos,
+            hazards=hazards_grid_pos,
+        )
+        
+        # Update the goal and hazard positions for the current grid.
+        self.goal_pos = goal_grid_pos
+        self.hazards_grid_pos = hazards_grid_pos
+        
+        # Match the existing grid's scale and position.
+        new_grid.scale(self.scale_factor).move_to(self.world['grid'].get_center())
+        
+        # Replace the existing grid with the new grid.
+        self.remove(self.world['grid'])
+        self.add(new_grid)
+        self.world['grid'] = new_grid
+        
+        return self
+    
+    def set_player_angle(self, angle: float, **kwargs):
+        self.get_player().set_angle(angle, **kwargs)
+        return self
+    
+    def move_player_to_pos(self, pos: tuple[int, int]):
+        pos = tuple(negative_index_rollover(i, size) for i,size in zip(pos, self.get_grid_size()))
+        self.get_player().move_to(self.pos_to_coord(pos))
+        print(f"{self.get_player_pos()=}")
+        return self
     
     def pos_to_index(self, pos: tuple[int,int]) -> int:
         """Converts a 2D position to a 1D index."""
+        # Handle negative index rollover.
+        pos = tuple(negative_index_rollover(i, size) for i,size in zip(pos, self.get_grid_size()))
         return pos[0]*self.grid_size[0] + pos[1]
     
     def index_to_pos(self, index: int) -> tuple[int,int]:
         """Converts a 1D index to a 2D position."""
-        return (index//self.grid_size[0], index%self.grid_size[1])
+        r, c = self.get_grid_size()
+        if index < 0: # Handle negative index rollover.
+            index = r * c - index
+        pos = (index//r, index%c)
+        return pos
 
     def pos_to_coord(self, pos: tuple[int,int]) -> Point3D:
         """2D grid position to 3D frame coordinate."""
-        return self.world['grid'][self.pos_to_index(pos)].get_center() # 3D frame coordinate of grid element.
+        pos = tuple(negative_index_rollover(i, size) for i,size in zip(pos, self.get_grid_size()))
+        return self.get_grid_at_pos(pos).get_center() # 3D frame coordinate of grid element.
+        # return self.world['grid'][self.pos_to_index(pos)].get_center() # 3D frame coordinate of grid element.
     
     def coord_to_index(self, coord: Point3D) -> int:
         """Convert 3D vector coordinate to a 1D grid position index.
@@ -327,8 +414,9 @@ class MiniGrid(Group):
         This snaps the 3D coordinate to a 2D position on the grid based on the element's 1D index within the grid.
         Gets the closest grid position based on it's center point.
         """
-        closest_mobject = min(self.world['grid'], key=lambda g: np.linalg.norm(g.get_center() - coord))
-        closest_index = self.world['grid'].submobjects.index(closest_mobject)
+        grid = self.get_grid()
+        closest_mobject = min(grid, key=lambda g: np.linalg.norm(g.get_center() - coord))
+        closest_index = grid.submobjects.index(closest_mobject)
         return closest_index
 
     def coord_to_pos(self, coord: Point3D) -> tuple[int,int]:
@@ -339,6 +427,10 @@ class MiniGrid(Group):
         """
         closest_index = self.coord_to_index(coord)
         return self.index_to_pos(closest_index)
+
+    def get_grid_size(self) -> tuple[int, int]:
+        """Gets the size of the grid as the tuple (rows, columns)."""
+        return self.grid_size
 
     def get_player_coord(self) -> Point3D:
         """Get player position as 3D scene coordinate."""
@@ -351,6 +443,9 @@ class MiniGrid(Group):
 
     def get_player(self) -> Mobject:
         return self.world['player']
+
+    def get_grid(self) -> Mobject:
+        return self.world['grid']
 
     def get_goal_coord(self) -> Point3D:
         """Get goal position as 3D scene coordinate."""
@@ -366,11 +461,16 @@ class MiniGrid(Group):
     
     def get_grid_at_pos(self, pos: tuple[int,int]) -> Mobject:
         """Get grid MObject at 2D grid position (row, col)."""
+        pos = tuple(negative_index_rollover(i, size) for i,size in zip(pos, self.get_grid_size()))
         return self.world['grid'][self.pos_to_index(pos)]
     
     def get_hazards_pos(self) -> list[tuple[int,int]]:
         """Get list of hazard grid positions (row, col)."""
         return self.hazards_grid_pos
+
+    def get_player_look_angle(self) -> float:
+        """Gets the current player look angle in radians."""
+        return self.world['player'].get_angle()
 
     @staticmethod
     def build_minigrid(
@@ -378,51 +478,50 @@ class MiniGrid(Group):
         grid_obj_default: Mobject,
         grid_obj_hazard: Mobject,
         grid_obj_goal: Mobject,
-        grid_obj_player: Mobject,
-        player_pos: tuple[int, int] | None = None, # Defaults to top-left.
+        # grid_obj_player: Mobject,
+        # player_pos: tuple[int, int] | None = None, # Defaults to top-left.
         goal_pos: tuple[int, int] | None = None, # Defaults to bottom-right.
         hazards: list[tuple[int, int]] = [],
-        ) -> dict:
+        ) -> VGroup:
         """Helper function to generate a MiniGrid environment.
         
         Returns a 2D matrix of Manim `VMobject`.
         """
-        if player_pos == None: # Defaults to top-left.
-            player_pos = (0,0)
+        # if player_pos == None: # Defaults to top-left.
+        #     player_pos = (0,0)
         if goal_pos == None: # Defaults to bottom-right.
             goal_pos = (grid_size[0]-1, grid_size[1]-1)
         
         # Support for negative indexing.
-        if any(i < 0 for i in player_pos):
-            player_pos = tuple(negative_index_rollover(i, size) for i,size in zip(player_pos, grid_size))
+        # if any(i < 0 for i in player_pos):
+        #     player_pos = tuple(negative_index_rollover(i, size) for i,size in zip(player_pos, grid_size))
         if any(i < 0 for i in goal_pos):
             goal_pos = tuple(negative_index_rollover(i, size) for i,size in zip(goal_pos, grid_size))
         if any(i < 0 for haz in hazards for i in haz):
             hazards = [tuple(negative_index_rollover(i, size) for i,size in zip(haz, grid_size)) for haz in hazards]
 
         # Build the grid.
-        rows = []
-        for r in range(grid_size[0]):
-            cols = []
-            for c in range(grid_size[1]):
-                if (r,c) == goal_pos:
-                    cols.append(grid_obj_goal.copy())
-                elif (r,c) in hazards:
-                    cols.append(grid_obj_hazard.copy())
-                else:
-                    cols.append(grid_obj_default.copy())
-            rows.append(cols)
-        
-        grid = VGroup(*[o for o in itertools.chain(*rows)])
+        items = []
+        for r, c in itertools.product(range(grid_size[0]), range(grid_size[0])):
+            if (r,c) == goal_pos:
+                items.append(grid_obj_goal.copy())
+            elif (r,c) in hazards:
+                items.append(grid_obj_hazard.copy())
+            else:
+                items.append(grid_obj_default.copy())
+
+        grid = VGroup(*[o for o in items])
         grid.arrange_in_grid(rows=grid_size[0], cols=grid_size[1], buff=0)
         
-        player = grid_obj_player.copy()
-        player_target_pos = grid[player_pos[0]*grid_size[0] + player_pos[1]].get_center()
-        player.move_to(player_target_pos)
-        return {
-            'player': player,
-            'grid': grid,
-        }
+        return grid
+        
+        # player = grid_obj_player.copy()
+        # player_target_pos = grid[player_pos[0]*grid_size[0] + player_pos[1]].get_center()
+        # player.move_to(player_target_pos)
+        # return {
+        #     'player': player,
+        #     'grid': grid,
+        # }
 
     @staticmethod
     def round_to_nearest_angle(angle: float) -> int:
@@ -543,9 +642,78 @@ class PausableScene(Scene):
     def long_pause(self, duration=5, **kwargs):
         self.wait(duration, **kwargs)
 
+class CustomVoiceoverScene(VoiceoverScene):
+    def safe_wait(self, duration: float, **kwargs) -> None:
+        """Waits for a given duration. If the duration is less than one frame, it waits for one frame.
 
-class DemoForICAB(PausableScene):
+        Args:
+            duration (float): The duration to wait for in seconds.
+        """
+        if duration > 1 / config["frame_rate"]:
+            self.wait(duration, **kwargs)
+    
+    def wait_until_bookmark(self, mark: str, **kwargs) -> None:
+        """Waits until a bookmark is reached.
+
+        Args:
+            mark (str): The `mark` attribute of the bookmark to wait for.
+        """
+        self.safe_wait(self.current_tracker.time_until_bookmark(mark), **kwargs)
+    
+    def wait_for_voiceover(self, **kwargs) -> None:
+        """Waits for the voiceover to finish."""
+        if not hasattr(self, "current_tracker"):
+            return
+        if self.current_tracker is None:
+            return
+
+        self.safe_wait(self.current_tracker.get_remaining_duration(), **kwargs)
+    
+    @contextmanager
+    def voiceover(
+        self, text: Optional[str] = None, ssml: Optional[str] = None, wait_kwargs = {}, **kwargs
+    ) -> Generator[VoiceoverTracker, None, None]:
+        """The main function to be used for adding voiceover to a scene.
+
+        Args:
+            text (str, optional): The text to be spoken. Defaults to None.
+            ssml (str, optional): The SSML to be spoken. Defaults to None.
+
+        Yields:
+            Generator[VoiceoverTracker, None, None]: The voiceover tracker object.
+        """
+        if text is None and ssml is None:
+            raise ValueError("Please specify either a voiceover text or SSML string.")
+
+        try:
+            if text is not None:
+                yield self.add_voiceover_text(text, **kwargs)
+            elif ssml is not None:
+                yield self.add_voiceover_ssml(ssml, **kwargs)
+        finally:
+            self.wait_for_voiceover(**wait_kwargs)
+
+class DemoForICAB(PausableScene, CustomVoiceoverScene):
     def construct(self):
+        # Configure AI text-to-speech service.
+        # See Manim Voiceover quickstart for details: https://voiceover.manim.community/en/latest/quickstart.html
+        
+        # # Use GTTS for debugging.
+        # self.set_speech_service(GTTSService(
+        #     lang="en",
+        #     tld="com",
+        #     global_speed=1.15,
+        #     transcription_model='base',
+        # ))
+        # Use OpenAI TTS for production.
+        self.set_speech_service(
+            OpenAIService(
+                voice="sage",
+                model="tts-1", # Best audio and pronunciation.
+                global_speed=1.1,
+                transcription_model='base',
+            )
+        )
         
         # Colorway.
         self.colors = {
@@ -569,10 +737,11 @@ class DemoForICAB(PausableScene):
             (self.section_scenario, dict(name="Scenario", skip_animations=False)),
             (self.section_experiment, dict(name="Experiment", skip_animations=False)),
             (self.section_summary, dict(name="Summary", skip_animations=False)),
-            (self.section_outro, dict(name="Outro", skip_animations=False)), # Last.
+            # (self.section_outro, dict(name="Outro", skip_animations=False)), # Last.
         ]
         for method, section_kwargs in sections:
             self.next_section(**section_kwargs)
+            print(f"{self.renderer._original_skipping_status=}")
             method()
         
         self.wait(1)
@@ -604,7 +773,7 @@ class DemoForICAB(PausableScene):
         ]
         eqmarl_full.next_to(eqmarl_acronym, DOWN, buff=0.5)
         
-        self.subtitle_text = MarkupText("<i>Coordination without Communication</i>", font_size=28)
+        self.subtitle_text = MarkupText(f"<big><span fgcolor=\"{self.colors['action']}\">Coordination</span></big> <small>without</small> <big><span fgcolor=\"{self.colors['no']}\">Communication</span></big>", font_size=28)
         self.subtitle_text.next_to(eqmarl_full, DOWN, buff=0.5)
         
         # self.attribution_text_full = Text("Alexander DeRieux & Walid Saad", font_size=22)
@@ -622,17 +791,33 @@ class DemoForICAB(PausableScene):
         eqmarl_glyphs = list(zip(eqmarl_acronym_glyphs, eqmarl_full_glyphs))
         
         # Animate the title.
-        self.play(FadeIn(eqmarl_acronym))
-        self.small_pause(frozen_frame=False)
-        self.play(Write(eqmarl_full))
-        self.small_pause(frozen_frame=False)
-        self.play(Write(self.subtitle_text))
+        with self.voiceover(
+            text="""Welcome to our video presentation for our <bookmark mark='1'/>recently published work titled eQMARL, which stands for <bookmark mark='2'/>Entangled Quantum Multi-Agent Reinforcement Learning.
+            """
+        ) as tracker:
+            self.wait_until_bookmark('1', frozen_frame=False)
+            self.play(FadeIn(eqmarl_acronym), run_time=tracker.time_until_bookmark('2'))
+            # self.wait_until_bookmark('2')
+            self.play(Write(eqmarl_full))
+        
         self.small_pause(frozen_frame=False)
         
-        # self.play(Create(self.attribution_text))
-        self.play(Write(self.attribution_text_full))
+        with self.voiceover(
+            text="""The key point of our work is that through quantum entanglement eQMARL enables swarms of AI agents to <bookmark mark='1'/> implicitly coordinate without direct communication.
+            """
+        ) as tracker:
+            self.wait_until_bookmark('1', frozen_frame=False)
+            self.play(Write(self.subtitle_text))
         
-        self.medium_pause(frozen_frame=False)
+        self.small_pause(frozen_frame=False)
+
+        with self.voiceover(
+            text="""Our work has been published in The Thirteenth International Conference on Learning Representations.
+            """
+        ) as tracker:
+            self.play(Write(self.attribution_text_full))
+        
+        self.small_pause(frozen_frame=False)
         
         self.play(FadeOut(eqmarl_full), FadeOut(self.subtitle_text), eqmarl_acronym.animate.scale(0.5).to_edge(UL), ReplacementTransform(self.attribution_text_full, self.attribution_text))
 
@@ -809,12 +994,12 @@ class DemoForICAB(PausableScene):
         # Text objects.
         texts = {}
         # texts['imagine-0'] = Text("Imagine two separate wildfire environments", font_size=32).to_edge(UP, buff=1)
-        texts['imagine-0'] = MarkupText(f'Imagine two separate <span fgcolor="{self.colors['observation'].to_hex()}">wildfire environments</span>', font_size=32).to_edge(UP, buff=1)
+        texts['imagine-0'] = MarkupText(f'Imagine two separate <span fgcolor="{self.colors["observation"].to_hex()}">wildfire environments</span>', font_size=32).to_edge(UP, buff=1)
         # texts['imagine-1'] = Text("and two AI-powered drones", font_size=32).to_edge(UP, buff=1)
         # texts['imagine-1'] = Text("and two AI-powered drones", font_size=32).next_to(texts['imagine-0'], DOWN)
         texts['imagine-1'] = MarkupText(f'and two <span fgcolor="{PINK.to_hex()}">AI-powered drones</span>', font_size=32).next_to(texts['imagine-0'], DOWN)
         # texts['imagine-2'] = Paragraph("The drones are tasked with\nextinguishing the environment fires", font_size=32, alignment='center').to_edge(UP, buff=1.5)
-        texts['imagine-2'] = MarkupText(f'tasked with <span fgcolor="{self.colors['action'].to_hex()}">extinguishing</span> the environment fires', font_size=32).next_to(texts['imagine-1'], DOWN)
+        texts['imagine-2'] = MarkupText(f'tasked with <span fgcolor="{self.colors["action"].to_hex()}">extinguishing</span> the environment fires', font_size=32).next_to(texts['imagine-1'], DOWN)
         texts['ideal-0'] = MarkupText(f"In an <u>ideal</u> scenario", font_size=32).to_edge(UP, buff=1)
         # texts['ideal-1'] = Text("The drones could learn the task faster", font_size=24).next_to(arrows['ideal-com-lr'], UP)
         # texts['ideal-2'] = MarkupText(f"by cooperatively sharing their <span fgcolor=\"{self.colors['observation'].to_hex()}\">experiences</span>", font_size=24).next_to(arrows['ideal-com-rl'], DOWN)
@@ -840,59 +1025,72 @@ class DemoForICAB(PausableScene):
         
         
         # Imagine.
-        self.play(Write(texts['imagine-0']))
-        self.play(FadeIn(objs['env-left']), FadeIn(objs['env-right']))
-        # self.play(ReplacementTransform(texts['imagine-0'], texts['imagine-1']))
-        self.play(Write(texts['imagine-1']))
-        self.play(FadeIn(objs['drone-left']), FadeIn(objs['drone-right']))
-        # self.play(FadeOut(texts['imagine-1']))
-        self.play(Write(texts['imagine-2']))
-        
-        # Animate the rain drops.
-        n = 3
-        for i in range(n):
-            objs['rain-left'].save_state()
-            objs['rain-right'].save_state()
-            self.play(
-                objs['rain-left'].animate.move_to(objs['env-left'].get_center()).set_opacity(0),
-                objs['rain-right'].animate.move_to(objs['env-right'].get_center()).set_opacity(0),
-            )
-            if i < n-1: # Do not restore last iteraiton.
-                objs['rain-left'].restore()
-                objs['rain-right'].restore()
+        with self.voiceover(
+            text="""Imagine a scenario with two isolated <bookmark mark='1'/> wildfire environments,
+            and <bookmark mark='2'/> two AI-powered drones <bookmark mark='3'/> tasked with <bookmark mark='4'/> extinguishing the fires in each environment.
+            """
+        ) as tracker:
+            self.play(Write(texts['imagine-0']), run_time=tracker.time_until_bookmark('1', limit=1))
+            self.play(FadeIn(objs['env-left']), FadeIn(objs['env-right']), run_time=tracker.time_until_bookmark('2', limit=1))
+            self.wait_until_bookmark('2', frozen_frame=False)
+            # self.play(Write(texts['imagine-1']))
+            self.play(Write(texts['imagine-1']), FadeIn(objs['drone-left']), FadeIn(objs['drone-right']), run_time=tracker.time_until_bookmark('3', limit=1))
             
-        self.small_pause(frozen_frame=False)
-        # self.medium_pause(frozen_frame=False)
-        # self.play(ReplacementTransform(texts['imagine-1'], texts['imagine-2']))
-        # self.play(FadeOut(texts['imagine-2']))
-        self.play(*[FadeOut(o) for k,o in texts.items() if 'imagine' in k])
+            self.wait_until_bookmark('3', frozen_frame=False)
+            self.play(Write(texts['imagine-2']))
+        
+            # Animate the rain drops.
+            self.wait_until_bookmark('4', frozen_frame=False)
+            n = 3
+            for i in range(n):
+                objs['rain-left'].save_state()
+                objs['rain-right'].save_state()
+                self.play(
+                    objs['rain-left'].animate.move_to(objs['env-left'].get_center()).set_opacity(0),
+                    objs['rain-right'].animate.move_to(objs['env-right'].get_center()).set_opacity(0),
+                )
+                if i < n-1: # Do not restore last iteraiton.
+                    objs['rain-left'].restore()
+                    objs['rain-right'].restore()
+                
+            self.small_pause(frozen_frame=False)
+            self.play(*[FadeOut(o) for k,o in texts.items() if 'imagine' in k])
         
         # Ideal.
-        self.play(Write(texts['ideal-0']))
-        self.play(
-            Write(arrows['env-left-up']),
-            Write(arrows['env-left-down']),
-            Write(arrows['env-right-up']),
-            Write(arrows['env-right-down']),
-        )
-        self.play(Write(texts['ideal-1']), Write(arrows['ideal-com-lr']))
-        self.play(FadeIn(texts['ideal-2']), Write(arrows['ideal-com-rl']))
-        self.medium_pause(frozen_frame=False)
+        with self.voiceover(text="In an ideal scenario") as tracker:
+            self.play(
+                Write(texts['ideal-0']),
+                Write(arrows['env-left-up']),
+                Write(arrows['env-left-down']),
+                Write(arrows['env-right-up']),
+                Write(arrows['env-right-down']),
+            )
+        with self.voiceover(text="the drones can learn the task more efficiently") as tracker:
+            self.play(Write(texts['ideal-1']), Write(arrows['ideal-com-lr']))
+        with self.voiceover(text="by cooperatively sharing their unique local experiences.") as tracker:
+            self.play(FadeIn(texts['ideal-2']), Write(arrows['ideal-com-rl']))
+
+        self.small_pause(frozen_frame=False)
         self.play(FadeOut(texts['ideal-0']), FadeOut(texts['ideal-1']), FadeOut(arrows['ideal-com-lr']), FadeOut(texts['ideal-2']), FadeOut(arrows['ideal-com-rl']))
         
         # No communication.
-        self.play(Write(texts['nocom-0']))
-        self.play(FadeIn(objs['obstacle']))
-        self.play(
-            Write(texts['nocom-1']),
-        )
-        self.play(
-            FadeIn(objs['nocom-left']),
-            FadeIn(objs['nocom-right']),
-            Write(arrows['no-com-lr']),
-            Write(arrows['no-com-rl']),
-        )
-        self.medium_pause(frozen_frame=False)
+        with self.voiceover(text="But in certain environment conditions, <bookmark mark='1'/> such as an obstacle preventing communication between the drones") as tracker:
+            self.play(Write(texts['nocom-0']))
+            self.wait_until_bookmark('1', frozen_frame=False)
+            self.play(FadeIn(objs['obstacle']))
+            
+        with self.voiceover(text="This sharing of local information is not possible") as tracker:
+            self.play(
+                Write(texts['nocom-1']),
+            )
+            self.play(
+                FadeIn(objs['nocom-left']),
+                FadeIn(objs['nocom-right']),
+                Write(arrows['no-com-lr']),
+                Write(arrows['no-com-rl']),
+            )
+        # self.medium_pause(frozen_frame=False)
+        self.small_pause(frozen_frame=False)
         self.play(
             FadeOut(texts['nocom-0']),
             FadeOut(texts['nocom-1']),
@@ -910,44 +1108,58 @@ class DemoForICAB(PausableScene):
         self.small_pause(frozen_frame=False)
         
         # Quantum.
-        self.play(Write(texts['quantum-0']))
-        self.wait(1)
-        self.play(ReplacementTransform(texts['quantum-0'], texts['quantum-1']))
-        self.play(FadeIn(objs['qubit-left']), FadeIn(objs['qubit-right']))
-        self.play(Write(waves['ent-0']))
-        objs['obstacle'].set_z_index(1) # On top.
+        with self.voiceover(text="However") as tracker:
+            self.play(Write(texts['quantum-0']))
+        # self.wait(1)
+        with self.voiceover(text="By exploiting the nature of quantum entanglment distributed between the drones, the drones are able to implicitly collaborate regardless of any obstacles.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+            self.play(ReplacementTransform(texts['quantum-0'], texts['quantum-1']))
+            self.play(FadeIn(objs['qubit-left']), FadeIn(objs['qubit-right']), Write(waves['ent-0']))
+            # self.play(Write(waves['ent-0']))
+            objs['obstacle'].set_z_index(1) # On top.
+            # self.small_pause(frozen_frame=False)
+            # self.safe_wait(1)
+            self.play(
+                Write(texts['quantum-2']),
+                trackers['amp-0'].animate.set_value(.2),
+                trackers['freq-0'].animate.set_value(4*PI),
+                objs['qubit-left'].animate.next_to(objs['drone-left'], RIGHT),
+                objs['qubit-right'].animate.next_to(objs['drone-right'], LEFT),
+                # run_time=tracker.get_remaining_duration(),
+            )
+
+        with self.voiceover(text="This means that, using quantum entanglement, <bookmark mark='1'/> the drones can use their unique local experiences <bookmark mark='2'/> to influence the actions of others <bookmark mark='3'/> without the need for direct communication.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+            self.wait_until_bookmark('1', frozen_frame=False)
+            self.play(FadeOut(texts['quantum-2']), ReplacementTransform(texts['quantum-1'], texts['quantum-3']))
+            arrows['env-left-up'].shift(LEFT*.2) # Move to center.
+            arrows['env-right-down'].shift(LEFT*.2) # Move to center.
+            self.play(
+                Write(arrows['env-left-up']),
+            )
+            self.wait_until_bookmark('2', frozen_frame=False)
+            self.play(Write(texts['quantum-4']))
+            self.play(
+                Write(arrows['env-right-down']),
+            )
+            self.wait_until_bookmark('3', frozen_frame=False)
+            self.play(Write(texts['quantum-5']))
+        # self.medium_pause(frozen_frame=False)
         self.small_pause(frozen_frame=False)
-        self.play(
-            Write(texts['quantum-2']),
-            trackers['amp-0'].animate.set_value(.2),
-            trackers['freq-0'].animate.set_value(4*PI),
-            objs['qubit-left'].animate.next_to(objs['drone-left'], RIGHT),
-            objs['qubit-right'].animate.next_to(objs['drone-right'], LEFT),
-        )
-        self.play(FadeOut(texts['quantum-2']), ReplacementTransform(texts['quantum-1'], texts['quantum-3']))
-        arrows['env-left-up'].shift(LEFT*.2) # Move to center.
-        arrows['env-right-down'].shift(LEFT*.2) # Move to center.
-        self.play(
-            Write(arrows['env-left-up']),
-        )
-        self.play(Write(texts['quantum-4']))
-        self.play(
-            Write(arrows['env-right-down']),
-        )
-        self.play(Write(texts['quantum-5']))
-        self.medium_pause(frozen_frame=False)
+        
         
         # Lasting point before section change.
-        self.play(ReplacementTransform(VGroup(texts['quantum-3'], texts['quantum-4'], texts['quantum-5']), texts['quantum-6']))
-        self.play(Write(texts['quantum-7']))
-        self.play(arrows['env-left-up'].obj.animate.set_color(YELLOW).set_stroke(width=12, opacity=0.5), rate_func=there_and_back)
-        self.play(
-            Wiggle(objs['qubit-left']),
-            Wiggle(objs['qubit-right']),
-            rate_func=linear,
-        )
-        self.play(arrows['env-right-down'].obj.animate.set_color(YELLOW).set_stroke(width=12, opacity=0.5), rate_func=there_and_back)
-        self.medium_pause(frozen_frame=False)
+        with self.voiceover(text="This is the essence of our work. Using quantum entanglement to facilitate multi-agent learning via <bookmark mark='1'/> implicit coordination without direct communication.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+            self.play(ReplacementTransform(VGroup(texts['quantum-3'], texts['quantum-4'], texts['quantum-5']), texts['quantum-6']))
+            self.wait_until_bookmark('1', frozen_frame=False)
+            self.play(Write(texts['quantum-7']))
+            self.play(arrows['env-left-up'].obj.animate.set_color(YELLOW).set_stroke(width=12, opacity=0.5), rate_func=there_and_back)
+            self.play(
+                Wiggle(objs['qubit-left']),
+                Wiggle(objs['qubit-right']),
+                rate_func=linear,
+            )
+            self.play(arrows['env-right-down'].obj.animate.set_color(YELLOW).set_stroke(width=12, opacity=0.5), rate_func=there_and_back)
+        # self.medium_pause(frozen_frame=False)
+        self.small_pause(frozen_frame=False)
 
         # Clear the screen of all objects created in this section.
         mobjects_in_scene = list(set(self.mobjects) - set([self.eqmarl_acronym, self.attribution_text]))
@@ -961,10 +1173,10 @@ class DemoForICAB(PausableScene):
         # Text objects.
         objs['text-exp-0'] = Text("Let's see an illustrative example", font_size=32)
         objs['text-exp-1'] = Tex(r"This is an $5\times5$ maze grid environment for 1 drone", font_size=32).to_edge(UP, buff=1.5)
-        objs['text-exp-2'] = Tex(r"The drone can take actions $a \in \{\textrm{left}, \textrm{right}, \textrm{forward}\}$ to move in the grid", font_size=32).to_edge(UP, buff=1.5)
+        objs['text-exp-2'] = Tex(r"The drone can take actions $a \in \{\textrm{left}, \textrm{right}, \textrm{forward}\}$ to move in the maze", font_size=32).to_edge(UP, buff=1.5)
         objs['text-exp-3'] = Text("As the drone moves it gathers experiences", font_size=32).to_edge(UP, buff=1.5)
         objs['text-exp-4'] = Text("The drone learns from experiences to find the goal", font_size=32).to_edge(UP, buff=1.5)
-        objs['text-exp-5'] = Text("Now consider 2 parallel environments with different drones", font_size=32).to_edge(UP, buff=1.5)
+        objs['text-exp-5'] = Text("Now consider two parallel environments with different drones", font_size=32).to_edge(UP, buff=1.5)
         objs['text-exp-6'] = Text("The drones cannot directly communicate with each other", font_size=32).to_edge(UP, buff=1.5)
         objs['text-exp-7'] = Text("Which means they cannot coordinate using shared experiences", font_size=32).to_edge(UP, buff=1.5)
         # objs['text-exp-7-1'] = Text("Which means they cannot coordinate using shared experiences", font_size=32).to_edge(UP, buff=1.5)
@@ -986,8 +1198,14 @@ class DemoForICAB(PausableScene):
         # MiniGrid legend for big grid.
         objs['grid-big-legend'] = Group(*[
             MObjectWithLabel(
+                obj=objs['grid-big-center'].assets['player'].copy().scale(0.25).rotate(270*DEGREES), # Rotated to point right.
+                label=Text("Drone", font_size=18),
+                buff=0.2,
+                direction=RIGHT,
+            ),
+            MObjectWithLabel(
                 obj=objs['grid-big-center'].assets['grid-empty'].copy().scale(0.25),
-                label=Text("Empty grid square", font_size=18),
+                label=Text("Safe grid square", font_size=18),
                 buff=0.2,
                 direction=RIGHT,
             ),
@@ -1000,12 +1218,6 @@ class DemoForICAB(PausableScene):
             MObjectWithLabel(
                 obj=objs['grid-big-center'].assets['grid-goal'].copy().scale(0.25),
                 label=Text("Goal", font_size=18),
-                buff=0.2,
-                direction=RIGHT,
-            ),
-            MObjectWithLabel(
-                obj=objs['grid-big-center'].assets['player'].copy().scale(0.25),
-                label=Text("Drone", font_size=18),
                 buff=0.2,
                 direction=RIGHT,
             ),
@@ -1148,78 +1360,235 @@ class DemoForICAB(PausableScene):
         ###
         # Animations.
         ###
-        self.play(Write(objs['text-exp-0'])) # Let's see example.
+        with self.voiceover(text="With this in mind, let's dive deeper through an illustrative example.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+            self.play(Write(objs['text-exp-0'])) # Let's see example.
         
         self.small_pause(frozen_frame=False)
         
-        self.play(ReplacementTransform(objs['text-exp-0'], objs['text-exp-1'])) # This is a grid.
-        self.play(FadeIn(objs['grid-big-center'])) # Show big grid in center.
-        for m in objs['grid-big-legend']: # Show the legend elements.
-            self.play(FadeIn(m))
+        # return
         
-        self.play(ReplacementTransform(objs['text-exp-1'], objs['text-exp-2'])) # Player actions.
-        self.play(
-            objs['grid-big-center'].animate_actions(*minigrid_path_str_to_list('fff')),
-            run_time=2,
-        )
-        self.play(ReplacementTransform(objs['text-exp-2'], objs['text-exp-3'])) # Gains experiences.
-        self.play(
-            objs['grid-big-center'].animate_actions(*minigrid_path_str_to_list('frf')),
-            run_time=2,
-        )
-        self.play(ReplacementTransform(objs['text-exp-3'], objs['text-exp-4'])) # To find the goal.
-        self.play(
-            objs['grid-big-center'].animate_actions(*minigrid_path_str_to_list('fff')),
-            run_time=2,
-        )
-        self.play(FadeOut(objs['grid-big-legend']))
-        self.play(FadeOut(objs['text-exp-4']))
-        self.play(FadeOut(objs['grid-big-center']))
+        with self.voiceover(text="This is a five-by-five maze environment for a <bookmark mark='1'/> drone, consisting of <bookmark mark='2'/> safe grid squares, <bookmark mark='3'/> lava hazards, <bookmark mark='4'/> and a goal.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+            self.play(ReplacementTransform(objs['text-exp-0'], objs['text-exp-1'])) # This is a grid.
+            self.play(FadeIn(objs['grid-big-center'])) # Show big grid in center.
+            for i, m in enumerate(objs['grid-big-legend']): # Show the legend elements.
+                self.wait_until_bookmark(str(i+1), frozen_frame=False)
+                self.play(FadeIn(m))
         
+        with self.voiceover(text="The drone can move through the maze by taking actions left, right, and forward.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+            self.play(ReplacementTransform(objs['text-exp-1'], objs['text-exp-2'])) # Player actions.
+            self.play(
+                objs['grid-big-center'].animate_actions(*minigrid_path_str_to_list('fff')),
+                run_time=2,
+            )
+
+        with self.voiceover(text="As the drone moves it gathers experiences.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+            self.play(ReplacementTransform(objs['text-exp-2'], objs['text-exp-3'])) # Gains experiences.
+            self.play(
+                objs['grid-big-center'].animate_actions(*minigrid_path_str_to_list('frf')),
+                run_time=2,
+            )
         
+        with self.voiceover(text="And the drone learns from these experiences to find the goal.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+            self.play(ReplacementTransform(objs['text-exp-3'], objs['text-exp-4'])) # To find the goal.
+            self.play(
+                objs['grid-big-center'].animate_actions(*minigrid_path_str_to_list('fff')),
+                run_time=2,
+            )
+        self.play(FadeOut(objs['grid-big-legend']), FadeOut(objs['text-exp-4']), FadeOut(objs['grid-big-center']))
         
         # Show two grids.
-        self.play(Write(objs['text-exp-5'])) # Now consider 2 environments.
+        with self.voiceover(text="Now let's consider an extension of this scenario with two parallel maze environments with different drones in each.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+            self.play(Write(objs['text-exp-5'])) # Now consider 2 environments.
+            self.play(
+                GrowFromCenter(objs['grid-big-left']),
+                GrowFromCenter(objs['grid-big-right']),
+            )
+        orig_left = objs['grid-big-left'].copy()
+        orig_right = objs['grid-big-right'].copy()
+        with self.voiceover(text="The drones are not able to directly communicate with each other, due to the gap between them.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+            path_left = 'ff'
+            path_right='rff'
+            self.play(ReplacementTransform(objs['text-exp-5'], objs['text-exp-6'])) # Cannot communicate.
+            self.play(
+                AnimationGroup(
+                    objs['grid-big-left'].obj.animate_actions(*minigrid_path_str_to_list(path_left), run_time=len(path_left)/2.),
+                    objs['grid-big-right'].obj.animate_actions(*minigrid_path_str_to_list(path_right), run_time=len(path_right)/2.),
+                ),
+                # run_time=2,
+            )
+        with self.voiceover(text="From a learning perspective, this means that they are not able to coordinate using shared experiences.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+            path_left = 'rf'
+            path_right='flf'
+            self.play(ReplacementTransform(objs['text-exp-6'], objs['text-exp-7'])) # Cannot coordinate.
+            self.play(
+                    AnimationGroup(
+                        objs['grid-big-left'].obj.animate_actions(*minigrid_path_str_to_list(path_left), run_time=len(path_left)/2.),
+                        objs['grid-big-right'].obj.animate_actions(*minigrid_path_str_to_list(path_right), run_time=len(path_right)/2.),
+                    ),
+                    # run_time=2,
+                )
+        # with self.voiceover(text="From a learning perspective, this means that they are not able to coordinate using shared experiences. This is a problem because, we see that drone A fell into the lava, and the information it learned could be helpful for drone B to learn to avoid the hazard, but the lack of direct communication means that drone B will not know what happened and must experience the hazard itself.", wait_kwargs=dict(frozen_frame=False)) as tracker:
         self.play(
-            GrowFromCenter(objs['grid-big-left']),
-            GrowFromCenter(objs['grid-big-right']),
+            ReplacementTransform(objs['grid-big-left'], orig_left),
+            ReplacementTransform(objs['grid-big-right'], orig_right),
         )
-        self.play(ReplacementTransform(objs['text-exp-5'], objs['text-exp-6'])) # Cannot communicate.
-        self.play(
-            objs['grid-big-left'].obj.animate_actions(*minigrid_path_str_to_list('fff')),
-            objs['grid-big-right'].obj.animate_actions(*minigrid_path_str_to_list('rff')),
-            run_time=2,
-        )
-        self.play(ReplacementTransform(objs['text-exp-6'], objs['text-exp-7'])) # Cannot coordinate.
-        self.play(
-            objs['grid-big-left'].obj.animate_actions(*minigrid_path_str_to_list('rf')),
-            objs['grid-big-right'].obj.animate_actions(*minigrid_path_str_to_list('fl')),
-            run_time=2,
-        )
+        objs['grid-big-left'] = orig_left
+        objs['grid-big-right'] = orig_right
+        orig_left = objs['grid-big-left'].copy()
+        orig_right = objs['grid-big-right'].copy()
+        with self.voiceover(text="This is a problem because, we see that drone A fell into the lava, <bookmark mark='1'/> and the information it learned could be helpful for drone B to avoid the hazard, <bookmark mark='2'/> but the lack of direct communication means that drone B must experience the hazard itself.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+            # path_left = 'fffrf' # Full path.
+            # path_right = 'rffflf' # Full path.
+            path_left = 'ffrf' # Full path.
+            path_right = 'rffflf' # Full path.
+            # objs['text-exp-7'] = Text("Which means they cannot coordinate using shared experiences", font_size=32).to_edge(UP, buff=1.5)
+            objs['text-exp-7-1'] = Text("This is a problem because drone A fell into the lava", font_size=32).to_edge(UP, buff=1.5)
+            self.play(ReplacementTransform(objs['text-exp-7'], objs['text-exp-7-1']))
+            self.play(
+                AnimationGroup(
+                    objs['grid-big-left'].obj.animate_actions(*minigrid_path_str_to_list(path_left), run_time=len(path_left)/2.),
+                    objs['grid-big-right'].obj.animate_actions(*minigrid_path_str_to_list(path_right), run_time=len(path_right)/2.),
+                )
+                # run_time=2,
+            )
+            self.play(
+                ReplacementTransform(objs['grid-big-left'], orig_left),
+                ReplacementTransform(objs['grid-big-right'], orig_right),
+            )
+            objs['grid-big-left'] = orig_left
+            objs['grid-big-right'] = orig_right
+            orig_left = objs['grid-big-left'].copy()
+            orig_right = objs['grid-big-right'].copy()
+            #
+            self.wait_until_bookmark('1', frozen_frame=False)
+            objs['text-exp-7-2'] = Text("drone A's experiences could help drone B avoid the hazard", font_size=32).to_edge(UP, buff=1.5)
+            self.play(ReplacementTransform(objs['text-exp-7-1'], objs['text-exp-7-2']))
+            self.play(
+                AnimationGroup(
+                    objs['grid-big-left'].obj.animate_actions(*minigrid_path_str_to_list(path_left), run_time=len(path_left)/2.),
+                    objs['grid-big-right'].obj.animate_actions(*minigrid_path_str_to_list(path_right), run_time=len(path_right)/2.),
+                )
+                # run_time=2,
+            )
+            self.play(
+                ReplacementTransform(objs['grid-big-left'], orig_left),
+                ReplacementTransform(objs['grid-big-right'], orig_right),
+            )
+            objs['grid-big-left'] = orig_left
+            objs['grid-big-right'] = orig_right
+            orig_left = objs['grid-big-left'].copy()
+            orig_right = objs['grid-big-right'].copy()
+            #
+            self.wait_until_bookmark('2', frozen_frame=False)
+            objs['text-exp-7-3'] = Text("but no communication means that drone B must experience the hazard for itself", font_size=32).to_edge(UP, buff=1.5)
+            self.play(ReplacementTransform(objs['text-exp-7-2'], objs['text-exp-7-3']))
+            while tracker.get_remaining_duration() > 0:
+                self.play(
+                    AnimationGroup(
+                        objs['grid-big-left'].obj.animate_actions(*minigrid_path_str_to_list(path_left), run_time=len(path_left)/2.),
+                        objs['grid-big-right'].obj.animate_actions(*minigrid_path_str_to_list(path_right), run_time=len(path_right)/2.),
+                    )
+                    # run_time=2,
+                )
+                if tracker.get_remaining_duration() > 0:
+                    self.play(
+                        ReplacementTransform(objs['grid-big-left'], orig_left),
+                        ReplacementTransform(objs['grid-big-right'], orig_right),
+                    )
+                    objs['grid-big-left'] = orig_left
+                    objs['grid-big-right'] = orig_right
+                    orig_left = objs['grid-big-left'].copy()
+                    orig_right = objs['grid-big-right'].copy()
+            # self.play(
+            #     ReplacementTransform(objs['grid-big-left'], orig_left),
+            #     ReplacementTransform(objs['grid-big-right'], orig_right),
+            # )
+            # objs['grid-big-left'] = orig_left
+            # objs['grid-big-right'] = orig_right
+            # orig_left = objs['grid-big-left'].copy()
+            # orig_right = objs['grid-big-right'].copy()
+            # #
+            
+            # # self.play(ReplacementTransform(objs['text-exp-6'], objs['text-exp-7'])) # Cannot coordinate.
+            # # self.play(
+            # #     objs['grid-big-left'].obj.animate_actions(*minigrid_path_str_to_list('rf')),
+            # #     objs['grid-big-right'].obj.animate_actions(*minigrid_path_str_to_list('fl')),
+            # #     run_time=2,
+            # # )
+            # # path_left = 'rf' # Short abbreviated path.
+            # # path_right = 'fl' # Short abbreviated path.
+            # path_left = 'fffrf' # Full path.
+            # path_right = 'rfffl' # Full path.
+            # while tracker.get_remaining_duration() > 0:
+            #     self.play(
+            #         objs['grid-big-left'].obj.animate_actions(*minigrid_path_str_to_list(path_left)),
+            #         objs['grid-big-right'].obj.animate_actions(*minigrid_path_str_to_list(path_right)),
+            #         run_time=2,
+            #     )
+            #     if tracker.get_remaining_duration() > 0:
+            #         self.play(
+            #             ReplacementTransform(objs['grid-big-left'], orig_left),
+            #             ReplacementTransform(objs['grid-big-right'], orig_right),
+            #         )
+            #         objs['grid-big-left'] = orig_left
+            #         objs['grid-big-right'] = orig_right
+            #         orig_left = objs['grid-big-left'].copy()
+            #         orig_right = objs['grid-big-right'].copy()
+            #         # path_left = 'fffrf' # Full path.
+            #         # path_right = 'rfffl' # Full path.
         
-        
-        self.play(
-            ReplacementTransform(objs['grid-big-left'], objs['grid-small-left']),
-            ReplacementTransform(objs['grid-big-right'], objs['grid-small-right']),
-        )
-        self.play(ReplacementTransform(objs['text-exp-7'], objs['text-exp-8'])) # Using quantum.
-        self.play(
-            FadeIn(objs['qubit-left']),
-            FadeIn(objs['qubit-right']),
-            FadeIn(objs['wave-leftright']),
-        )
-        self.play(Write(objs['text-exp-9']))
-        self.play(
-            objs['grid-small-left'].obj.animate_actions(*minigrid_path_str_to_list('rffl')),
-            objs['grid-small-right'].obj.animate_actions(*minigrid_path_str_to_list('ffr')),
-            run_time=2,
-        )
-        self.play(Write(objs['text-exp-10']))
-        self.play(
-            objs['grid-small-left'].obj.animate_actions(*minigrid_path_str_to_list('ffffrff')),
-            objs['grid-small-right'].obj.animate_actions(*minigrid_path_str_to_list('fffflff')),
-            run_time=2,
-        )
+        with self.voiceover(text="On the other hand, quantum entanglement can bridge the gap between the drones.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+            self.play(
+                ReplacementTransform(objs['grid-big-left'], objs['grid-small-left']),
+                ReplacementTransform(objs['grid-big-right'], objs['grid-small-right']),
+            )
+            self.play(ReplacementTransform(objs['text-exp-7-3'], objs['text-exp-8'])) # Using quantum.
+            self.play(
+                FadeIn(objs['qubit-left']),
+                FadeIn(objs['qubit-right']),
+                FadeIn(objs['wave-leftright']),
+            )
+        orig_left = objs['grid-small-left'].copy()
+        orig_right = objs['grid-small-right'].copy()
+        with self.voiceover(text="In effect, coupling their unique local experiences, and allowing them to learn optimal actions without the need for direct communication.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+            self.play(Write(objs['text-exp-9']))
+            self.play(
+                # objs['grid-small-left'].obj.animate_actions(*minigrid_path_str_to_list('rffl')),
+                # objs['grid-small-right'].obj.animate_actions(*minigrid_path_str_to_list('ffr')),
+                objs['grid-small-left'].obj.animate_actions(*minigrid_path_str_to_list('frf')),
+                objs['grid-small-right'].obj.animate_actions(*minigrid_path_str_to_list('rff')),
+                run_time=2,
+            )
+        with self.voiceover(text="As you can see from this example, drone B did not fall into the lava because their choice of actions was influenced by the quantum entangled experiences of drone A.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+            self.play(Write(objs['text-exp-10']))
+            # path_left = 'ffffrff' # Short abbreviated path.
+            # path_right = 'fffflff' # Short abbreviated path.
+            path_left = 'ffflfff' # Short abbreviated path.
+            path_right = 'fflffff' # Short abbreviated path.
+            while tracker.get_remaining_duration() > 0:
+                self.play(
+                    objs['grid-small-left'].obj.animate_actions(*minigrid_path_str_to_list(path_left)),
+                    objs['grid-small-right'].obj.animate_actions(*minigrid_path_str_to_list(path_right)),
+                    run_time=2,
+                )
+                if tracker.get_remaining_duration() > 0:
+                    self.play(
+                        ReplacementTransform(objs['grid-small-left'], orig_left),
+                        ReplacementTransform(objs['grid-small-right'], orig_right),
+                    )
+                    objs['grid-small-left'] = orig_left
+                    objs['grid-small-right'] = orig_right
+                    orig_left = objs['grid-small-left'].copy()
+                    orig_right = objs['grid-small-right'].copy()
+                    # path_left = 'rfflffffrff' # Full path.
+                    # path_right = 'ffrfffflff' # Full path.
+                    path_left = 'frfffflfff' # Full path.
+                    path_right = 'rfffflffff' # Full path.
+            # self.play(
+            #     objs['grid-small-left'].obj.animate_actions(*minigrid_path_str_to_list('ffffrff')),
+            #     objs['grid-small-right'].obj.animate_actions(*minigrid_path_str_to_list('fffflff')),
+            #     run_time=2,
+            # )
         
         self.play(
             FadeOut(objs['text-exp-8']),
@@ -1234,7 +1603,6 @@ class DemoForICAB(PausableScene):
             ReplacementTransform(objs['qubit-right'], objs['qubit-down']),
             ReplacementTransform(objs['wave-leftright'], objs['wave-updown']),
         )
-        
         
         ###
         # Result graphs.
@@ -1448,9 +1816,13 @@ class DemoForICAB(PausableScene):
         objs['text-exp-11'] = Text("We ran several similar experiments", font_size=32).move_to(gap_center).shift(UP*2)
         objs['text-exp-12'] = Text("to demonstrate the effectiveness of eQMARL", font_size=32).next_to(objs['text-exp-11'], DOWN)
         objs['text-exp-13'] = Text("These are our results...", font_size=32).next_to(objs['text-exp-12'], DOWN*2)
-        self.play(Write(objs['text-exp-11']))
-        self.play(Write(objs['text-exp-12']))
-        self.play(Write(objs['text-exp-13']))
+        with self.voiceover(text="We ran several similar experiments <bookmark mark='1'/> to demonstrate the effectiveness of our proposed approach. <bookmark mark='2'/> The following details our results.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+            self.play(Write(objs['text-exp-11']))
+            self.wait_until_bookmark('1', frozen_frame=False)
+            self.play(Write(objs['text-exp-12']))
+            self.wait_until_bookmark('2', frozen_frame=False)
+            self.play(Write(objs['text-exp-13']))
+
         self.small_pause(frozen_frame=False)
         self.play(
             ReplacementTransform(Group(objs['text-exp-11'], objs['text-exp-12'], objs['text-exp-13']), group_graphs['ax']),
@@ -1458,25 +1830,35 @@ class DemoForICAB(PausableScene):
         )
 
         objs['text-exp-14'] = Text("These are our baselines", font_size=32).next_to(group_graphs['legend-box'], UP)
-        self.play(Write(objs['text-exp-14']))
-        self.play(Write(group_graphs['legend-box']))
-        self.play(
-            Write(group_graphs['legend']['fctde']),
-            Write(group_graphs['legend']['qfctde']),
-            # Write(group_graphs['legend']['sctde']),
-        )
-        self.small_pause(frozen_frame=False)
+        with self.voiceover(text="These are our baseline models for comparison. The orange is a baseline that uses classical, or non-quantum, computing methods, and the magenta is a quantum baseline that does not use entanglement between the drones.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+            self.play(Write(objs['text-exp-14']))
+            self.play(Write(group_graphs['legend-box']))
+            self.play(
+                Write(group_graphs['legend']['fctde']),
+                Write(group_graphs['legend']['qfctde']),
+                # Write(group_graphs['legend']['sctde']),
+            )
+            
+            # Add all the plot series so they can be shown.
+            # We add them here to take up the rest of the audio time.
+            for series_kwargs in series:
+                self.add(group_graphs['series'][series_kwargs['key']]['mean'])
+        
+        # self.small_pause(frozen_frame=False)
+        
+        
         objs['text-exp-15'] = Text("and this is eQMARL", font_size=32).next_to(group_graphs['legend-box'], UP)
-        self.play(
-            ReplacementTransform(objs['text-exp-14'], objs['text-exp-15']),
-            Write(group_graphs['legend']['eqmarl-psi+']),
-        )
+        with self.voiceover(text="This blue line represents our proposed approach.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+            self.play(
+                ReplacementTransform(objs['text-exp-14'], objs['text-exp-15']),
+                Write(group_graphs['legend']['eqmarl-psi+']),
+            )
         self.small_pause(frozen_frame=False)
         self.play(FadeOut(objs['text-exp-15']))
         
-        # Add all the plot series so they can be shown.
-        for series_kwargs in series:
-            self.add(group_graphs['series'][series_kwargs['key']]['mean'])
+        # # Add all the plot series so they can be shown.
+        # for series_kwargs in series:
+        #     self.add(group_graphs['series'][series_kwargs['key']]['mean'])
 
         # Create a pointer for animating the epochs.
         pointer = always_redraw(
@@ -1490,45 +1872,72 @@ class DemoForICAB(PausableScene):
             lambda pointer=pointer: MathTex(f"t={tracker_x_value.get_value():.0f}", font_size=24).next_to(pointer, UP, buff=0.1)
         ).next_to(pointer, UP, buff=0.1)
         
-        objs['text-exp-16'] = Text("After 3,000 unique maze configurations...", font_size=32).next_to(group_graphs['legend-box'], UP)
-        self.play(Write(objs['text-exp-16']))
         
-        # Add the pointer and label.
-        self.play(FadeIn(pointer), FadeIn(label))
         
-        # Animate the plots from left-to-right by setting the tracker value to the end value.
-        self.play(
-            tracker_x_value.animate.set_value(x_range[-1]),
-            Succession(
-                *[ApplyMethod(objs['grid-small-up'].obj.move_player, a) for a in [random.choice(list(MinigridAction)) for _ in range(x_range[-1])]],
-                *[
-                    ApplyMethod(objs['grid-small-up'].obj.get_player().move_to, objs['grid-small-up'].obj.get_goal().get_center()),
-                ],
-            ),
-            Succession(
-                *[ApplyMethod(objs['grid-small-down'].obj.move_player, a) for a in [random.choice(list(MinigridAction)) for _ in range(x_range[-1])]],
-                *[
-                    ApplyMethod(objs['grid-small-down'].obj.get_player().move_to, objs['grid-small-down'].obj.get_goal().get_center()),
-                ],
-            ),
-            run_time=5,
-        )
+        def generate_random_grid_permutation_animations(grid: MiniGrid, n: int, regenerate_every_n: int = 100, k: int = 3) -> Succession:
+            random_actions = [random.choice(list(MinigridAction)) for _ in range(n)]
+            anims = []
+            for i, a in enumerate(random_actions):
+                anims.append(
+                    ApplyMethod(grid.move_player, a)
+                )
+                if i > 0 and i % regenerate_every_n == 0:
+                    # Randomly generate new hazards.
+                    new_haz_pos = random.sample(list(itertools.product(range(1, grid.grid_size[0]-1), range(1, grid.grid_size[1]-1))), k=k)
+                    anims.append(
+                        ApplyMethod(grid.alter_grid, new_haz_pos)
+                    )
+            # Ensure the player is at the goal position at the end of the animation sequence.
+            anims.append(
+                ApplyMethod(grid.move_player_to_pos, grid.get_goal_pos()),
+            )
+            anims.append(
+                ApplyMethod(grid.set_player_angle, 270*DEGREES),
+            )
+            return Succession(*anims)
         
-        # Remove the pointer and tracker label.
-        self.play(FadeOut(pointer), FadeOut(label))
+        objs['text-exp-16'] = Text("After 3,000 unique environment configurations...", font_size=32).next_to(group_graphs['legend-box'], UP)
+        with self.voiceover(text="After three-thousand unique environment configurations, where the topology of each environment changes with every permutation", wait_kwargs=dict(frozen_frame=False)) as tracker:
+            self.play(Write(objs['text-exp-16']))
+        
+            # Add the pointer and label.
+            self.play(FadeIn(pointer), FadeIn(label))
+            
+            # Animate the plots from left-to-right by setting the tracker value to the end value.
+            self.play(
+                tracker_x_value.animate.set_value(x_range[-1]),
+                generate_random_grid_permutation_animations(
+                    grid=objs['grid-small-up'].obj,
+                    n=x_range[-1],
+                    regenerate_every_n=100,
+                ),
+                generate_random_grid_permutation_animations(
+                    grid=objs['grid-small-down'].obj,
+                    n=x_range[-1],
+                    regenerate_every_n=100,
+                ),
+                run_time=tracker.get_remaining_duration(buff=0.5),
+            )
+            
+            # Remove the pointer and tracker label.
+            self.play(FadeOut(pointer), FadeOut(label), run_time=0.5)
         
         # Emphasize score.
-        objs['text-exp-17'] = MarkupText("The agents learn to achieve a <b>higher score</b>", font_size=32).next_to(group_graphs['legend-box'], UP)
-        self.play(ReplacementTransform(objs['text-exp-16'], objs['text-exp-17']))
-        self.play(group_graphs['series'][series_kwargs['key']]['mean'].animate.set_stroke(8), rate_func=there_and_back, run_time=0.5)
-        self.play(group_graphs['series'][series_kwargs['key']]['mean'].animate.set_stroke(8), rate_func=there_and_back, run_time=0.5)
+        objs['text-exp-17'] = MarkupText("The drones learn to achieve a <b>higher score</b>", font_size=32).next_to(group_graphs['legend-box'], UP)
+        with self.voiceover(text="the drones learn to achieve a higher score", wait_kwargs=dict(frozen_frame=False)) as tracker:
+            self.play(ReplacementTransform(objs['text-exp-16'], objs['text-exp-17']))
+            for _ in range(2): # Repeat.
+                self.play(group_graphs['series'][series_kwargs['key']]['mean'].animate.set_stroke(8), rate_func=there_and_back, run_time=0.5)
+
         self.medium_pause(frozen_frame=False)
         
         # Emphasize std.
         objs['text-exp-18'] = MarkupText("with <b>lower standard deviation</b> than baselines", font_size=32).next_to(group_graphs['legend-box'], UP)
-        self.play(ReplacementTransform(objs['text-exp-17'], objs['text-exp-18']))
-        for series_kwargs in series:
-            self.play(FadeIn(group_graphs['series'][series_kwargs['key']]['std']), run_time=1)
+        with self.voiceover(text="with significantly lower standard deviation than the baselines.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+            self.play(ReplacementTransform(objs['text-exp-17'], objs['text-exp-18']))
+            for series_kwargs in series:
+                self.play(FadeIn(group_graphs['series'][series_kwargs['key']]['std']), run_time=1)
+
         self.medium_pause(frozen_frame=False)
         
         # Fade out everything except watermarks.
@@ -1539,65 +1948,352 @@ class DemoForICAB(PausableScene):
     
     def section_summary(self):
         
-        self.summary_header = MarkupText("The key takeaways are:", font_size=36).to_edge(UP, buff=2)
-        self.summary_list = IconList(
-            *[
-                MarkupText("Quantum entangled learning can <b>improve performance</b> and <b>couple agent behavior</b>", font_size=28),
-                MarkupText(f"e<span fgcolor=\"{self.colors['quantum'].to_hex()}\">Q</span>MARL <b>enhances privacy</b> by eliminating experience sharing", font_size=28),
-                MarkupText(f"e<span fgcolor=\"{self.colors['quantum'].to_hex()}\">Q</span>MARL <b>dramatically reduces communication overhead</b>", font_size=28),
-                MarkupText(f"e<span fgcolor=\"{self.colors['quantum'].to_hex()}\">Q</span>MARL can be deployed to <b>learn diverse environments</b>", font_size=28),
-            ],
-            icon=Star(color=YELLOW, fill_opacity=0.5).scale(0.3),
-            buff=(.2, .5),
-            col_alignments='rl',
-        ).next_to(self.summary_header, DOWN, buff=0.5)
-        self.play(Write(self.summary_header))
-        for icon, text in self.summary_list.enumerate_rows():
-            self.play(Write(icon), Write(text))
-            self.wait(1)
+        # self.summary_header = MarkupText("The key takeaways are:", font_size=36).to_edge(UP, buff=2)
+        # self.summary_list = IconList(
+        #     *[
+        #         MarkupText("Quantum entangled learning can <b>improve performance</b> and <b>couple agent behavior</b>", font_size=28),
+        #         MarkupText(f"e<span fgcolor=\"{self.colors['quantum'].to_hex()}\">Q</span>MARL <b>enhances privacy</b> by eliminating experience sharing", font_size=28),
+        #         MarkupText(f"e<span fgcolor=\"{self.colors['quantum'].to_hex()}\">Q</span>MARL <b>dramatically reduces communication overhead</b>", font_size=28),
+        #         MarkupText(f"e<span fgcolor=\"{self.colors['quantum'].to_hex()}\">Q</span>MARL can be deployed to <b>learn diverse environments</b>", font_size=28),
+        #     ],
+        #     icon=Star(color=YELLOW, fill_opacity=0.5).scale(0.3),
+        #     buff=(.2, .5),
+        #     col_alignments='rl',
+        # ).next_to(self.summary_header, DOWN, buff=0.5)
         
-        self.medium_pause(frozen_frame=False)
+        # with self.voiceover(text="The key takeaways are as follows.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+        #     self.play(Write(self.summary_header))
+        
+        # self.small_pause(frozen_frame=False)
+        
+        # # Get list of summary icons and text objects.
+        # icons, texts = tuple(zip(*list(self.summary_list.enumerate_rows())))
+        
+        # with self.voiceover(text="Quantum entangled learning can improve performance through coupled agent behavior.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+        #     self.play(Write(icons[0]), Write(texts[0]))
+        
+        # self.small_pause(frozen_frame=False)
 
-    def section_outro(self):
-        """Outro section.
+        # with self.voiceover(text="eQMARL enhances privacy by eliminating the sharing of local experiences through direct communication", wait_kwargs=dict(frozen_frame=False)) as tracker:
+        #     self.play(Write(icons[1]), Write(texts[1]))
         
-        This is the last section played in the video.
-        """
+        # self.small_pause(frozen_frame=False)
+
+        # with self.voiceover(text="it dramatically reduces communication overhead because experiences are never shared between agents", wait_kwargs=dict(frozen_frame=False)) as tracker:
+        #     self.play(Write(icons[2]), Write(texts[2]))
         
-        qr = segno.make("https://arxiv.org/abs/2405.17486", micro=False, error='H')
-        img = SegnoQRCodeImageMobject(qr, scale=100, dark=GRAY_A.to_hex(), finder_dark=PURPLE.to_hex(), border=0, light=None).scale(0.1)
+        # self.small_pause(frozen_frame=False)
         
-        texts = {}
-        # texts['subtitle'] = Text("Coordination without Communication", font_size=28)
-        texts['subtitle'] = MarkupText("<i>Coordination without Communication</i>", font_size=28)
-        # texts['attribution'] = Text("Alexander DeRieux & Walid Saad (2025)", font_size=24)
+        # with self.voiceover(text="and it can be deployed to learn a diverse set of environments, such as the wildfire and maze scenarios previously shown.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+        #     self.play(Write(icons[3]), Write(texts[3]))
+
+
+        ######################
+        circle = Circle(radius=2, color=GRAY_D).scale(0.75).rotate(90*DEGREES)
+        circle_dashed = DashedVMobject(circle).set_z_index(0.5)
+        takeaways_short_texts, takeaways_long_texts, voiceover_text, colors = zip(*[
+            [
+                MarkupText("Performance", font_size=24),
+                MarkupText("Quantum entangled learning can <b>improve performance</b> and <b>couple agent behavior</b>", font_size=24),
+                "Quantum entangled learning can improve performance through coupled agent behavior.",
+                PINK,
+            ],
+            [
+                MarkupText(f"Privacy", font_size=24),
+                MarkupText(f"e<span fgcolor=\"{PURPLE.to_hex()}\">Q</span>MARL <b>enhances privacy</b> by eliminating experience sharing", font_size=24),
+                "eQMARL enhances privacy by eliminating the sharing of local experiences through direct communication",
+                BLUE,
+            ],
+            [
+                MarkupText(f"Efficiency", font_size=24),
+                MarkupText(f"e<span fgcolor=\"{PURPLE.to_hex()}\">Q</span>MARL <b>dramatically reduces communication overhead</b>", font_size=24),
+                "it dramatically reduces communication overhead because experiences are never shared between agents",
+                RED,
+            ],
+            [
+                MarkupText(f"Deployability", font_size=24),
+                MarkupText(f"e<span fgcolor=\"{PURPLE.to_hex()}\">Q</span>MARL can be deployed to <b>learn diverse environments</b>", font_size=24),
+                "and it can be deployed to learn a diverse set of environments, such as the wildfire and maze scenarios previously shown.",
+                ORANGE,
+            ],
+        ])
+        
+        # takeaway_header = Text("Key Takeaways", font_size=28).move_to(circle.get_center())
+        with self.voiceover(text="The key takeaways are as follows.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+            self.play(
+                self.eqmarl_acronym.animate.move_to(ORIGIN),
+            )
+            # self.play(
+            #     Create(circle_dashed),
+            # )
+        
+        directions = [UP, RIGHT, DOWN, LEFT]
+        groups_on_screen = VGroup()
+        for i, (ts, tl, tv, c) in enumerate(zip(takeaways_short_texts, takeaways_long_texts, voiceover_text, colors)):
+            ts.set_z_index(3)
+            ts.set_color(c)
+            box = Circle().surround(ts).set_z_index(2)
+            box.set_color(c)
+            group = VGroup(box, ts).next_to(circle, UP, buff=0.2)
+            tlg = VGroup(
+                BackgroundRectangle(tl, fill_opacity=1),
+                tl,
+            ).set_z_index(3).next_to(circle, UP, buff=0.2)
+            
+            with self.voiceover(text=tv, wait_kwargs=dict(frozen_frame=False)) as tracker:
+                self.play(Write(tlg))
+                # Wait until just before the voiceover finishes.
+                self.wait(tracker.get_remaining_duration(buff=-1), frozen_frame=False)
+                # Transition to the short boxed form of the text.
+                self.play(ReplacementTransform(tlg, group))
+                groups_on_screen.add(group)
+                if i < len(takeaways_short_texts) - 1: # Do not rotate on last item.
+                    # Rotate all the groups on the screen.
+                    anims = [
+                        g.animate.next_to(circle, directions[(j + 1)%len(directions)], buff=0.2)
+                        for j, g in enumerate(reversed(groups_on_screen))
+                    ]
+                    # anims.append(circle_dashed.animate.rotate(-90*DEGREES))
+                    self.play(*anims, run_time=1)
+        
+        self.small_pause(frozen_frame=False)
+        
+        # Final remarks while key-point-circles orbit the center circle.
+        # with self.voiceover(text="The increased performance, enhanced privacy, improved communication efficiency, and diverse deployability benefits highlight the unique benefits of quantum computation and specifically quantum entanglement to machine learning applications. All of this together comprises <bookmark mark='1'/> eQMARL, a quantum entangled approach for multi-agent reinforcement learning that <bookmark mark='2'/> facilitates implicit coordination without direct communication.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+        with self.voiceover(text="The increased performance, enhanced privacy, improved communication efficiency, and diverse deployability highlight the benefits of quantum computation, and specifically quantum entanglement, as highly applicable tools in multi-agent machine learning applications. These advantages form the foundation of our proposed <bookmark mark='1'/> eQMARL, a uniquely quantum approach to multi-agent reinforcement learning that uses quantum entanglement to <bookmark mark='2'/> enable implicit coordination without direct communication.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+        
+            # Offset outer circles to be on the 45-degree angles of the center circle.
+            directions = [UR, DR, DL, UL]
+            circle_scale = 0.85
+            circle.scale(circle_scale)
+            anims = []
+            # anims += [
+            #     circle_dashed.animate.scale(circle_scale).rotate(-90*DEGREES)
+            # ]
+            anims += [
+                g.animate.next_to(circle, directions[j], buff=-0.5)
+                for j, g in enumerate(reversed(groups_on_screen))
+            ]
+            self.play(*anims, run_time=1)
+            
+            # Rotate around the center circle.
+            # To do this, create hidden circles with radius from 
+            # origin of center circle to origin of outer circle
+            # and move along the path of that hidden circle.
+            circle_copy = circle.copy()
+            anims = []
+            # anims += [
+            #     Rotate(circle_dashed, -2*PI, about_point=circle_dashed.get_center())
+            # ]
+            circle_copy.rotate(-45*DEGREES) # Starts from top-right.
+            for j, g in enumerate(reversed(groups_on_screen)):
+                dist = np.linalg.norm(circle_copy.get_center() - g.get_center())
+                newcircle = circle_copy.copy().scale_to_fit_width(2*dist)
+                anims.append(
+                    MoveAlongPath(g, newcircle.reverse_direction())
+                )
+                circle_copy.rotate(-90*DEGREES) # clockwise.
+            circle_copy.rotate(+45*DEGREES) # Back to top.
+            self.play(*anims, run_time=max(1, tracker.time_until_bookmark('1')))
+            
+            self.wait_until_bookmark('1')
+            anims = []
+            # anims += [circle_dashed.animate.move_to(ORIGIN).scale(0)]
+            anims += [ReplacementTransform(g, self.eqmarl_acronym[1]) for g in groups_on_screen]
+            self.play(*anims, run_time=1)
+            self.play(self.eqmarl_acronym.animate.scale(2).move_to(ORIGIN).shift(UP*2))
+            
+            texts = {}
+            texts['subtitle'] = MarkupText(f"<big><span fgcolor=\"{self.colors['action']}\">Coordination</span></big> <small>without</small> <big><span fgcolor=\"{self.colors['no']}\">Communication</span></big>", font_size=28)
+            
+            texts['subtitle'].next_to(self.eqmarl_acronym, DOWN)
+            self.wait_until_bookmark('2', frozen_frame=False)
+            self.play(Write(texts['subtitle']))
+        
+        
+        self.wait(1, frozen_frame=False)
+        
         texts['attribution'] = VGroup(
             Text("Alexander DeRieux & Walid Saad", font_size=22),
             MarkupText("Published in <i>The Thirteenth International Conference on Learning Representations (ICLR)</i> 2025", font_size=20),
         ).arrange(DOWN, buff=0.2)
-        texts['arxiv'] = Text("Paper is available on arXiv", font_size=20)
+        texts['arxiv'] = Text("Paper is available on arXiv", font_size=18)
         
-        # Transform summary list into watermark at top-left.
-        self.play(ReplacementTransform(Group(self.summary_list, self.summary_header), self.eqmarl_acronym))
+        qr = segno.make("https://arxiv.org/abs/2405.17486", micro=False, error='H')
+        img = SegnoQRCodeImageMobject(qr, scale=100, dark=GRAY_A.to_hex(), finder_dark=PURPLE.to_hex(), border=0, light=None).scale(0.1)
         
-        # Shift and scale watermark to center as main title.
-        self.play(self.eqmarl_acronym.animate.scale(2).move_to(ORIGIN).shift(UP*2))
+        with self.voiceover(text="Thank you for watching our presentation. Our work is published in The Thirteenth International Conference on Learning Representations, and the paper can be found online through archive by scanning the QR code as shown.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+            # Show QR code.
+            img.next_to(texts['subtitle'], DOWN)
+            self.play(FadeIn(img))
+            
+            # Show image text.
+            texts['arxiv'].next_to(img, DOWN)
+            self.play(Write(texts['arxiv']))
         
-        # Show subtitle.
-        texts['subtitle'].next_to(self.eqmarl_acronym, DOWN)
-        self.play(Write(texts['subtitle']))
-        
-        # Show QR code.
-        img.next_to(texts['subtitle'], DOWN)
-        self.play(FadeIn(img))
-        
-        # Show image text.
-        texts['arxiv'].next_to(img, DOWN)
-        self.play(Write(texts['arxiv']))
-        
-        # Show author names.
-        texts['attribution'].next_to(texts['arxiv'], DOWN*1.25)
-        self.play(ReplacementTransform(self.attribution_text, texts['attribution']))
+            # Show author names.
+            texts['attribution'].next_to(texts['arxiv'], DOWN*1.25)
+            self.play(ReplacementTransform(self.attribution_text, texts['attribution']))
         
         # Wait.
         self.long_pause(frozen_frame=False)
+        
+        ######################
+
+        
+        # self.medium_pause(frozen_frame=False)
+        # self.small_pause(frozen_frame=False)
+
+    ###
+    # OUTRO IS NO LONGER REQUIRED, THE SUMMARY SECTION HANDLES THE ENDING.
+    ###
+
+    # def section_outro(self):
+    #     """Outro section.
+        
+    #     This is the last section played in the video.
+    #     """
+        
+    #     qr = segno.make("https://arxiv.org/abs/2405.17486", micro=False, error='H')
+    #     img = SegnoQRCodeImageMobject(qr, scale=100, dark=GRAY_A.to_hex(), finder_dark=PURPLE.to_hex(), border=0, light=None).scale(0.1)
+        
+    #     texts = {}
+    #     # texts['subtitle'] = Text("Coordination without Communication", font_size=28)
+    #     # texts['subtitle'] = MarkupText("<i>Coordination without Communication</i>", font_size=28)
+    #     texts['subtitle'] = MarkupText(f"<big><span fgcolor=\"{self.colors['action']}\">Coordination</span></big> <small>without</small> <big><span fgcolor=\"{self.colors['no']}\">Communication</span></big>", font_size=28)
+    #     # texts['attribution'] = Text("Alexander DeRieux & Walid Saad (2025)", font_size=24)
+    #     texts['attribution'] = VGroup(
+    #         Text("Alexander DeRieux & Walid Saad", font_size=22),
+    #         MarkupText("Published in <i>The Thirteenth International Conference on Learning Representations (ICLR)</i> 2025", font_size=20),
+    #     ).arrange(DOWN, buff=0.2)
+    #     texts['arxiv'] = Text("Paper is available on arXiv", font_size=20)
+
+
+    #     with self.voiceover(text="Thank you for watching our presentation on <bookmark mark='1'/> eQMARL, a quantum entangled approach for multi-agent reinforcement learning that facilitates <bookmark mark='2'/> implicit coordination without direct communication.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+            
+    #         # Transform summary list into watermark at top-left.
+    #         # self.wait_until_bookmark('1', frozen_frame=False)
+    #         self.play(ReplacementTransform(Group(self.summary_list, self.summary_header), self.eqmarl_acronym), run_time=tracker.time_until_bookmark('1'))
+        
+    #         # Shift and scale watermark to center as main title.
+    #         self.play(self.eqmarl_acronym.animate.scale(2).move_to(ORIGIN).shift(UP*2), run_time=tracker.time_until_bookmark('2'))
+            
+    #         # Show subtitle.
+    #         texts['subtitle'].next_to(self.eqmarl_acronym, DOWN)
+    #         self.wait_until_bookmark('2', frozen_frame=False)
+    #         self.play(Write(texts['subtitle']))
+        
+    #     self.small_pause(frozen_frame=False)
+        
+    #     with self.voiceover(text="Our work is published in The Thirteenth International Conference on Learning Representations, and the paper can be found online through archive by scanning the QR code as shown.", wait_kwargs=dict(frozen_frame=False)) as tracker:
+    #         # Show QR code.
+    #         img.next_to(texts['subtitle'], DOWN)
+    #         self.play(FadeIn(img))
+            
+    #         # Show image text.
+    #         texts['arxiv'].next_to(img, DOWN)
+    #         self.play(Write(texts['arxiv']))
+        
+    #         # Show author names.
+    #         texts['attribution'].next_to(texts['arxiv'], DOWN*1.25)
+    #         self.play(ReplacementTransform(self.attribution_text, texts['attribution']))
+        
+    #     # Wait.
+    #     self.long_pause(frozen_frame=False)
+
+
+
+
+class Playground(Scene):
+    def construct(self):
+        
+        # # Create a circle
+        # circle = Circle(radius=2, color=BLUE)
+        
+        # # Define text boxes
+        # texts = ["Top", "Right", "Bottom", "Left"]
+        # positions = [UP, RIGHT, DOWN, LEFT]
+        
+        # text_boxes = VGroup(*[
+        #     SurroundingRectangle(Text(txt).move_to(circle.get_center() + pos), color=WHITE)
+        #     for txt, pos in zip(texts, positions)
+        # ])
+
+        # # Add elements to the scene
+        # self.play(Create(circle))
+        # self.play(LaggedStart(*[Create(tb) for tb in text_boxes], lag_ratio=0.3))
+        
+        # # Animate them moving outward
+        # self.play(*[
+        #     tb.animate.move_to(tb.get_center() * 1.5)
+        #     for tb in text_boxes
+        # ])
+        
+        
+        
+        
+        #########
+        
+        
+        circle = Circle(radius=2, color=GRAY_D)
+        circle_dashed = DashedVMobject(circle).set_z_index(0.5)
+        
+        takeaways_short_texts, takeaways_long_texts, colors = zip(*[
+            [
+                MarkupText("Enhance Performance", font_size=24),
+                MarkupText("Quantum entangled learning can <b>improve performance</b> and <b>couple agent behavior</b>", font_size=24),
+                PINK,
+            ],
+            [
+                MarkupText(f"Enhances Privacy", font_size=24),
+                MarkupText(f"e<span fgcolor=\"{PURPLE.to_hex()}\">Q</span>MARL <b>enhances privacy</b> by eliminating experience sharing", font_size=24),
+                BLUE,
+            ],
+            [
+                MarkupText(f"Reduces Communication Overhead", font_size=24),
+                MarkupText(f"e<span fgcolor=\"{PURPLE.to_hex()}\">Q</span>MARL <b>dramatically reduces communication overhead</b>", font_size=24),
+                RED,
+            ],
+            [
+                MarkupText(f"Learns Diverse Environments", font_size=24),
+                MarkupText(f"e<span fgcolor=\"{PURPLE.to_hex()}\">Q</span>MARL can be deployed to <b>learn diverse environments</b>", font_size=24),
+                ORANGE,
+            ],
+        ])
+        
+        directions = [UP, RIGHT, DOWN, LEFT]
+        groups_on_screen = VGroup()
+        for i, (ts, tl, c) in enumerate(zip(takeaways_short_texts, takeaways_long_texts, colors)):
+            ts.set_z_index(3)
+            ts.set_color(c)
+            box = SurroundingRectangle(ts, color=WHITE, corner_radius=0.1, buff=0.2).set_z_index(2)
+            box.set_color(c)
+            bg = BackgroundRectangle(box, fill_opacity=1).set_z_index(1)
+            group = VGroup(bg, box, ts)
+            tlg = VGroup(
+                BackgroundRectangle(tl, fill_opacity=1),
+                tl,
+            ).set_z_index(3).next_to(circle, UP, buff=0.1)
+            self.play(Write(tlg))
+            group.next_to(circle, UP, buff=0)
+            if i == 0:
+                self.play(
+                    ReplacementTransform(tlg, group),
+                    Create(circle_dashed),
+                )
+            else:
+                self.play(
+                    ReplacementTransform(tlg, group),
+                )
+            groups_on_screen.add(group)
+            if i < len(takeaways_short_texts) - 1: # Do not rotate on last item.
+                anims = [
+                    g.animate.next_to(circle, directions[(j + 1)%len(directions)], buff=0)
+                    for j, g in enumerate(reversed(groups_on_screen))
+                ]
+                anims.append(circle_dashed.animate.rotate(-90*DEGREES))
+                self.play(*anims, run_time=1)
+            
+            
+        
+        self.wait(1)
