@@ -1198,7 +1198,7 @@ class DemoForICAB(PausableScene, CustomVoiceoverScene):
         # MiniGrid legend for big grid.
         objs['grid-big-legend'] = Group(*[
             MObjectWithLabel(
-                obj=objs['grid-big-center'].assets['player'].copy().scale(0.25),
+                obj=objs['grid-big-center'].assets['player'].copy().scale(0.25).rotate(270*DEGREES), # Rotated to point right.
                 label=Text("Drone", font_size=18),
                 buff=0.2,
                 direction=RIGHT,
@@ -1896,8 +1896,8 @@ class DemoForICAB(PausableScene, CustomVoiceoverScene):
             )
             return Succession(*anims)
         
-        objs['text-exp-16'] = Text("After 3,000 unique maze configurations...", font_size=32).next_to(group_graphs['legend-box'], UP)
-        with self.voiceover(text="After three-thousand unique maze configurations, where the locations of the lava hazards within each maze change with every permutation", wait_kwargs=dict(frozen_frame=False)) as tracker:
+        objs['text-exp-16'] = Text("After 3,000 unique environment configurations...", font_size=32).next_to(group_graphs['legend-box'], UP)
+        with self.voiceover(text="After three-thousand unique environment configurations, where the topology of each environment changes with every permutation", wait_kwargs=dict(frozen_frame=False)) as tracker:
             self.play(Write(objs['text-exp-16']))
         
             # Add the pointer and label.
