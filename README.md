@@ -2,7 +2,7 @@
 
 [![License: CC-BY-4.0](https://img.shields.io/badge/License-CC_BY_4.0-04a635.svg?logo=creativecommons&logoColor=white)](https://creativecommons.org/licenses/by/4.0/)
 
-Visualizations for eQMARL project.
+Visualizations for [eQMARL](https://github.com/news-vt/eqmarl) project.
 
 ## Authors
 
