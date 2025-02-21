@@ -4,6 +4,10 @@
 
 Visualizations for [eQMARL](https://github.com/news-vt/eqmarl) project.
 
+## Media
+
+- `ICAB Demo` - General explainer video for ICAB demo. See release tagged [icab-demo](https://github.com/news-vt/eqmarl-vis/releases/icab-demo) for video files.
+
 ## Authors
 
 - [zanderman](https://github.com/zanderman) [![zanderman github](https://img.shields.io/badge/GitHub-zanderman-181717.svg?style=flat&logo=github)](https://github.com/zanderman)
