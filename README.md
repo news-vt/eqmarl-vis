@@ -7,6 +7,7 @@ Visualizations for [eQMARL](https://github.com/news-vt/eqmarl) project.
 ## Media
 
 - `ICAB Demo` - General explainer video for ICAB demo. See release tagged [icab-demo](https://github.com/news-vt/eqmarl-vis/releases/icab-demo) for video files.
+  > https://github.com/user-attachments/assets/7daf9eac-4b95-4d33-88be-d93856b48622
 
 ## Authors
 
